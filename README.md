@@ -41,6 +41,24 @@ Quick start — see [INSTALL.md](INSTALL.md) for detailed setup, Docker, systemd
 pip install bgpx
 ```
 
+Install from this source tree to `/opt/bgpx`:
+
+```bash
+sudo ./deploy.sh
+```
+
+The deploy script asks which port the Web UI should bind to. Press Enter to use `8080`, or pass the port noninteractively:
+
+```bash
+sudo ./deploy.sh --web-port 9090
+```
+
+Remove a `/opt/bgpx` deployment:
+
+```bash
+sudo ./uninstall.sh
+```
+
 Or with Docker:
 
 ```bash
@@ -59,6 +77,13 @@ docker run --rm -p 179:179 -p 8080:8080 bgpx
 ```bash
 bgpx
 # Open http://localhost:8080
+```
+
+After deploying with `deploy.sh`, open the port selected during deployment:
+
+```bash
+sudo ./deploy.sh --web-port 9090
+# Open http://localhost:9090
 ```
 
 ### Auto-start session
@@ -106,6 +131,8 @@ bgpx --local-as 65001 --router-id 10.0.0.1 \
 ## Web UI
 
 Open `http://localhost:8080` in a browser.
+
+If installed with `deploy.sh`, use the Web UI port selected during deployment. The default is `8080`.
 
 All data is pushed via **Server-Sent Events** — no polling, no page refresh needed.
 

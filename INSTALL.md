@@ -55,7 +55,63 @@ Verify installation:
 bgpx --help
 ```
 
-### Method 3: Docker
+### Method 3: Deploy to /opt
+
+The source tree includes `deploy.sh` for host installs. By default it installs the application under `/opt/bgpx`, creates a virtual environment at `/opt/bgpx/venv`, copies the source to `/opt/bgpx/app`, and links `bgpx` into `/usr/local/bin` when run as root.
+
+Interactive install:
+```bash
+sudo ./deploy.sh
+```
+
+The script asks which Web UI port to bind. Press Enter to use `8080`.
+
+Noninteractive install:
+```bash
+sudo ./deploy.sh --web-port 9090
+```
+
+Equivalent environment variable:
+```bash
+sudo WEB_PORT=9090 ./deploy.sh
+```
+
+Install and enable a systemd service:
+```bash
+sudo ./deploy.sh --service --web-port 8080
+```
+
+Allow the installed virtualenv Python to bind privileged ports such as BGP port 179:
+```bash
+sudo ./deploy.sh --cap-net-bind-service
+```
+
+Common combined production install:
+```bash
+sudo ./deploy.sh --service --cap-net-bind-service --web-port 8080
+```
+
+After deployment:
+```bash
+/opt/bgpx/venv/bin/bgpx --host 0.0.0.0 --port 8080
+```
+
+Or, when run as root and linked into `/usr/local/bin`:
+```bash
+bgpx --host 0.0.0.0 --port 8080
+```
+
+Uninstall a deployment:
+```bash
+sudo ./uninstall.sh
+```
+
+Uninstall without an interactive prompt:
+```bash
+sudo ./uninstall.sh --force
+```
+
+### Method 4: Docker
 
 Build the image:
 ```bash
@@ -161,6 +217,8 @@ Open `http://localhost:8080` in your browser. You should see:
 - Routes, Live Log, and Capture tabs
 - "IDLE" state in the top-right badge
 
+If you installed with `deploy.sh`, open the Web UI port selected during deployment. For example, `--web-port 9090` means `http://localhost:9090`.
+
 ### 3. Configure and Start a Session
 
 In the web UI:
@@ -265,41 +323,47 @@ docker run --rm --network bgpnet --name receiver \
 
 ## Running as a System Service
 
-### Using systemd (Linux)
+### Generated systemd Service
+
+The recommended systemd path is to let `deploy.sh` generate the unit:
+
+```bash
+sudo ./deploy.sh --service --cap-net-bind-service --web-port 8080
+sudo systemctl start bgpx
+sudo systemctl status bgpx
+```
+
+The generated service uses `/opt/bgpx/app` as the working directory and starts:
+
+```bash
+/opt/bgpx/venv/bin/bgpx --host 0.0.0.0 --port <selected-web-port>
+```
+
+### Manual systemd Service
 
 Create `/etc/systemd/system/bgpx.service`:
 
 ```ini
 [Unit]
 Description=BGP Flowspec Receiver
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=bgpx
-WorkingDirectory=/var/lib/bgpx
-ExecStart=/usr/local/bin/bgpx \
-  --local-as 65001 \
-  --router-id 10.0.0.1 \
-  --peer-ip 10.0.0.2 \
-  --peer-as 65000 \
-  --json-output /var/lib/bgpx/routes.json \
-  --log-level INFO
-Restart=always
+WorkingDirectory=/opt/bgpx/app
+ExecStart=/opt/bgpx/venv/bin/bgpx --host 0.0.0.0 --port 8080
+Restart=on-failure
 RestartSec=5
-
-# Capabilities for port 179
-AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Create bgpx user:
+To bind BGP port 179 without running the process as root, grant the installed Python binary the capability:
+
 ```bash
-sudo useradd -r -s /bin/false bgpx
-sudo mkdir -p /var/lib/bgpx
-sudo chown bgpx:bgpx /var/lib/bgpx
+sudo setcap cap_net_bind_service+ep $(readlink -f /opt/bgpx/venv/bin/python)
 ```
 
 Enable and start:
@@ -313,6 +377,36 @@ sudo systemctl status bgpx
 View logs:
 ```bash
 sudo journalctl -u bgpx -f
+```
+
+---
+
+## Uninstall
+
+Use `uninstall.sh` to remove a deployment created by `deploy.sh`:
+
+```bash
+sudo ./uninstall.sh
+```
+
+The script shows a removal plan and asks for confirmation. It stops and disables `bgpx.service` when present, removes `/etc/systemd/system/bgpx.service`, removes `/usr/local/bin/bgpx` only when it points into the selected install directory, and removes `/opt/bgpx`.
+
+Noninteractive uninstall:
+
+```bash
+sudo ./uninstall.sh --force
+```
+
+Remove service and command link but keep the install directory:
+
+```bash
+sudo ./uninstall.sh --keep-data
+```
+
+Remove a custom install path:
+
+```bash
+sudo ./uninstall.sh --install-dir /opt/custom-bgpx
 ```
 
 ---

@@ -4,8 +4,10 @@ set -Eeuo pipefail
 APP_NAME="bgpx"
 INSTALL_DIR="${INSTALL_DIR:-/opt/bgpx}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+WEB_PORT="${WEB_PORT:-}"
 CREATE_SERVICE=0
 SET_BIND_CAP=0
+SERVICE_FILE="/etc/systemd/system/${APP_NAME}.service"
 
 usage() {
   cat <<'EOF'
@@ -16,6 +18,7 @@ Install bgpx under /opt/bgpx by default.
 Options:
   --install-dir DIR          Install location (default: /opt/bgpx)
   --python PATH             Python interpreter to use (default: python3)
+  --web-port PORT           Web UI bind port (default prompt: 8080)
   --service                 Install and enable a systemd service
   --cap-net-bind-service    Allow the venv Python to bind privileged ports like 179
   -h, --help                Show this help
@@ -23,7 +26,39 @@ Options:
 Environment:
   INSTALL_DIR=/opt/bgpx
   PYTHON_BIN=python3
+  WEB_PORT=8080
 EOF
+}
+
+is_valid_port() {
+  [[ "$1" =~ ^[0-9]+$ ]] && [[ "$1" -ge 1 ]] && [[ "$1" -le 65535 ]]
+}
+
+prompt_web_port() {
+  local value
+
+  if [[ -n "${WEB_PORT}" ]]; then
+    if ! is_valid_port "${WEB_PORT}"; then
+      echo "Invalid WEB_PORT: ${WEB_PORT}. Use a port from 1 to 65535." >&2
+      exit 1
+    fi
+    return
+  fi
+
+  if [[ -t 0 ]]; then
+    while true; do
+      read -r -p "Web UI bind port [8080]: " value
+      value="${value:-8080}"
+      if is_valid_port "${value}"; then
+        WEB_PORT="${value}"
+        return
+      fi
+      echo "Invalid port. Use a port from 1 to 65535." >&2
+    done
+  fi
+
+  WEB_PORT=8080
+  echo "No interactive input detected; using default Web UI port ${WEB_PORT}."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -34,6 +69,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --python)
       PYTHON_BIN="${2:?missing value for --python}"
+      shift 2
+      ;;
+    --web-port)
+      WEB_PORT="${2:?missing value for --web-port}"
       shift 2
       ;;
     --service)
@@ -66,12 +105,15 @@ if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
   exit 1
 fi
 
+prompt_web_port
+
 SRC_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${INSTALL_DIR}/venv"
 APP_DIR="${INSTALL_DIR}/app"
 BIN_LINK="/usr/local/bin/${APP_NAME}"
 
 echo "Installing ${APP_NAME} from ${SRC_DIR} to ${INSTALL_DIR}"
+echo "Web UI will bind to 0.0.0.0:${WEB_PORT}"
 
 install -d "${APP_DIR}"
 
@@ -84,6 +126,7 @@ tar \
   --exclude='*.pyc' \
   --exclude='*.pyo' \
   --exclude='deploy.sh' \
+  --exclude='uninstall.sh' \
   -C "${SRC_DIR}" \
   -cf - . | tar -C "${APP_DIR}" -xf -
 
@@ -111,7 +154,7 @@ if [[ "${CREATE_SERVICE}" -eq 1 ]]; then
     exit 1
   fi
 
-  cat >/etc/systemd/system/${APP_NAME}.service <<EOF
+  cat >"${SERVICE_FILE}" <<EOF
 [Unit]
 Description=BGP Flowspec Receiver
 After=network-online.target
@@ -120,7 +163,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${APP_DIR}
-ExecStart=${VENV_DIR}/bin/bgpx --host 0.0.0.0 --port 8080
+ExecStart=${VENV_DIR}/bin/bgpx --host 0.0.0.0 --port ${WEB_PORT}
 Restart=on-failure
 RestartSec=5
 
@@ -130,12 +173,46 @@ EOF
 
   systemctl daemon-reload
   systemctl enable "${APP_NAME}.service"
-  echo "Installed systemd service: ${APP_NAME}.service"
+  echo "Installed systemd service: ${SERVICE_FILE}"
 fi
 
 echo
-echo "Install complete."
-echo "Run: ${VENV_DIR}/bin/bgpx --host 0.0.0.0 --port 8080"
+echo "Install complete"
+echo "=============="
+echo "Application:       ${APP_NAME}"
+echo "Install directory: ${INSTALL_DIR}"
+echo "Source copy:       ${APP_DIR}"
+echo "Virtualenv:        ${VENV_DIR}"
+echo "Executable:        ${VENV_DIR}/bin/bgpx"
+echo "Web UI bind:       0.0.0.0:${WEB_PORT}"
+echo "Web UI URL:        http://localhost:${WEB_PORT}"
 if [[ "${EUID}" -eq 0 ]]; then
-  echo "Or:  ${APP_NAME} --host 0.0.0.0 --port 8080"
+  echo "Command link:      ${BIN_LINK}"
+else
+  echo "Command link:      not created (run as root to link ${BIN_LINK})"
+fi
+if [[ "${SET_BIND_CAP}" -eq 1 ]]; then
+  echo "BGP port 179:      cap_net_bind_service granted to $(readlink -f "${VENV_DIR}/bin/python")"
+else
+  echo "BGP port 179:      run as root or redeploy with --cap-net-bind-service"
+fi
+if [[ "${CREATE_SERVICE}" -eq 1 ]]; then
+  echo "Systemd unit:      ${SERVICE_FILE}"
+  echo
+  echo "Next commands:"
+  echo "  sudo systemctl start ${APP_NAME}"
+  echo "  sudo systemctl status ${APP_NAME}"
+  echo "  sudo journalctl -u ${APP_NAME} -f"
+else
+  echo "Systemd unit:      not installed"
+  echo
+  echo "Start manually:"
+  echo "  ${VENV_DIR}/bin/bgpx --host 0.0.0.0 --port ${WEB_PORT}"
+fi
+echo
+echo "Uninstall:"
+if [[ -x "${SRC_DIR}/uninstall.sh" ]]; then
+  echo "  sudo ${SRC_DIR}/uninstall.sh"
+else
+  echo "  sudo rm -rf ${INSTALL_DIR} ${BIN_LINK} ${SERVICE_FILE}"
 fi
