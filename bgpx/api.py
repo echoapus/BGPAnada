@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-import pathlib
+from importlib import resources
 from datetime import datetime, timezone
 
 from aiohttp import web
@@ -12,7 +12,7 @@ from bgpx.session import SessionConfig, ESTABLISHED
 
 log = logging.getLogger(__name__)
 
-_UI_PATH = pathlib.Path(__file__).parent / "web" / "ui.html"
+_UI_RESOURCE = resources.files("bgpx").joinpath("web", "ui.html")
 
 
 def create_app(manager, rib, events, capture) -> web.Application:
@@ -37,7 +37,7 @@ def create_app(manager, rib, events, capture) -> web.Application:
 # ── Web UI ────────────────────────────────────────────────────────────────────
 
 async def _ui(req: web.Request) -> web.Response:
-    html = _UI_PATH.read_text()
+    html = _UI_RESOURCE.read_text(encoding="utf-8")
     return web.Response(text=html, content_type="text/html")
 
 

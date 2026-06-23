@@ -47,6 +47,8 @@ Install from this source tree to `/opt/bgpx`:
 sudo ./deploy.sh
 ```
 
+The deploy script installs from a copied source tree into a virtualenv and verifies that the installed package contains `bgpx/web/ui.html`, so packaging regressions fail during deployment instead of causing a Web UI 500 at runtime.
+
 The deploy script asks which port the Web UI should bind to. Press Enter to use `8080`, or pass the port noninteractively:
 
 ```bash

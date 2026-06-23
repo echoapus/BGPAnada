@@ -134,6 +134,18 @@ tar \
 "${VENV_DIR}/bin/python" -m pip install --upgrade pip
 "${VENV_DIR}/bin/pip" install "${APP_DIR}"
 
+"${VENV_DIR}/bin/python" - <<'PY'
+from importlib import resources
+
+ui = resources.files("bgpx").joinpath("web", "ui.html")
+if not ui.is_file():
+    raise SystemExit("Installed package is missing bgpx/web/ui.html")
+text = ui.read_text(encoding="utf-8")
+if "<!DOCTYPE html>" not in text:
+    raise SystemExit("Installed bgpx/web/ui.html does not look like the Web UI")
+print("Verified installed package data: bgpx/web/ui.html")
+PY
+
 if [[ "${EUID}" -eq 0 ]]; then
   ln -sfn "${VENV_DIR}/bin/${APP_NAME}" "${BIN_LINK}"
   echo "Linked ${BIN_LINK} -> ${VENV_DIR}/bin/${APP_NAME}"

@@ -66,6 +66,9 @@ sudo ./deploy.sh
 
 The script asks which Web UI port to bind. Press Enter to use `8080`.
 
+After `pip install`, the script verifies that the installed package can load `bgpx/web/ui.html`. If package data is missing, deployment stops immediately instead of leaving a service that returns HTTP 500 for the Web UI.
+
+
 Noninteractive install:
 ```bash
 sudo ./deploy.sh --web-port 9090
@@ -426,3 +429,20 @@ sudo ./uninstall.sh --install-dir /opt/custom-bgpx
 - Check logs: `bgpx --log-level DEBUG`
 - Review RFC compliance in [README.md](README.md#rfc-coverage)
 - File issues on GitHub
+
+### Issue: Web UI returns HTTP 500 after pip install or deploy
+
+**Symptom:** The API starts, but opening `/` fails because `bgpx/web/ui.html` is missing from the installed package.
+
+**Solutions:**
+1. Use a version whose `pyproject.toml` includes `bgpx = ["web/*.html"]` under `[tool.setuptools.package-data]`.
+2. Re-run `sudo ./deploy.sh`; deployment now verifies the installed package data before completing.
+3. For manual installs, run:
+   ```bash
+   python - <<'PY'
+   from importlib import resources
+   ui = resources.files("bgpx").joinpath("web", "ui.html")
+   print(ui.is_file(), ui)
+   PY
+   ```
+
