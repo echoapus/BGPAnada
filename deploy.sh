@@ -5,7 +5,7 @@ APP_NAME="bgpx"
 INSTALL_DIR="${INSTALL_DIR:-/opt/bgpx}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 WEB_PORT="${WEB_PORT:-}"
-CREATE_SERVICE=0
+CREATE_SERVICE=""
 SET_BIND_CAP=0
 SERVICE_FILE="/etc/systemd/system/${APP_NAME}.service"
 
@@ -105,7 +105,25 @@ if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
   exit 1
 fi
 
+prompt_service() {
+  # ponytail: prompt for service installation if running interactively as root and not explicitly set.
+  if [[ -z "${CREATE_SERVICE}" ]]; then
+    if [[ "${EUID}" -eq 0 && -t 0 ]]; then
+      local ans
+      read -r -p "Install and enable systemd service? [y/N]: " ans
+      if [[ "${ans}" =~ ^[Yy](es)?$ ]]; then
+        CREATE_SERVICE=1
+      else
+        CREATE_SERVICE=0
+      fi
+    else
+      CREATE_SERVICE=0
+    fi
+  fi
+}
+
 prompt_web_port
+prompt_service
 
 SRC_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${INSTALL_DIR}/venv"
