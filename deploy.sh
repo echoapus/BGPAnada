@@ -121,6 +121,8 @@ tar \
   --exclude='.git' \
   --exclude='.agents' \
   --exclude='.codex' \
+  --exclude='.vscode' \
+  --exclude='.idea' \
   --exclude='.pytest_cache' \
   --exclude='__pycache__' \
   --exclude='*.pyc' \
