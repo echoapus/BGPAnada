@@ -85,7 +85,7 @@ class PacketCapture:
         cmd = ["tcpdump", "-l", "-nn", "-X", "-i", "any",
                f"host {peer_ip} and port 179"]
 
-        self._emit("info", "Capture started  →  " + " ".join(cmd))
+        self._emit("info", "Capture started  →  " + " ".join(cmd), running=True)
         log.info("Capture: " + " ".join(cmd))
 
         try:
@@ -152,7 +152,7 @@ class PacketCapture:
                 except Exception:
                     pass
             self.running = False
-            self._emit("info", "Capture stopped")
+            self._emit("info", "Capture stopped", running=False)
             log.info("Capture stopped")
 
     def _flush(self, pkt: dict, hex_bytes: list[int], peer_ip: str) -> None:

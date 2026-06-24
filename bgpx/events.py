@@ -19,7 +19,7 @@ class EventBus:
         **extra,
     ) -> dict:
         event = {
-            "ts":      datetime.now(timezone.utc).isoformat(),
+            "ts":      datetime.now().astimezone().isoformat(),
             "type":    event_type,
             "level":   level,
             "message": message,

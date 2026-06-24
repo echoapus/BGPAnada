@@ -362,6 +362,7 @@ body {
 .routes-table th {
   position: sticky;
   top: 0;
+  z-index: 10;
   background: var(--bg1);
   color: var(--text2);
   font-size: 11px;
@@ -828,6 +829,11 @@ window.addEventListener('DOMContentLoaded', () => {
     autoScroll = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   });
 
+  // Remove invalid class on input
+  document.querySelectorAll('.sidebar input').forEach(input => {
+    input.addEventListener('input', () => input.classList.remove('invalid'));
+  });
+
   // Sortable column headers
   document.querySelectorAll('.routes-table th[data-col]').forEach(th => {
     th.addEventListener('click', () => {
@@ -904,6 +910,13 @@ function handleSnapshot(event) {
 
   // Update session state
   sessionRunning = s.running || false;
+  if (sessionRunning) {
+    populateForm(s);
+  } else {
+    restoreForm();
+  }
+  capturing = s.capture_running || false;
+  updateCaptureButton();
   updateStateBadge(s.state || 'IDLE');
   updatePeerLabel(s);
   updatePeerInfo(s.peer_info || {});
@@ -951,7 +964,9 @@ function handleLiveEvent(event) {
       sessionRunning = event.running;
       updatePeerLabel(event);
       updateFormState();
-      if (!event.running) {
+      if (event.running) {
+        populateForm(event);
+      } else {
         routeMap.clear();
         renderRoutes();
         updateRibStats();
@@ -960,6 +975,13 @@ function handleLiveEvent(event) {
     }
     if (event.peer_info) {
       updatePeerInfo(event.peer_info);
+    }
+  }
+
+  else if (event.type === 'capture') {
+    if (event.running !== undefined) {
+      capturing = event.running;
+      updateCaptureButton();
     }
   }
 }
@@ -1005,6 +1027,15 @@ function updateFormState() {
   setFormDisabled(sessionRunning);
   document.getElementById('start-btn').disabled = sessionRunning;
   document.getElementById('stop-btn').disabled  = !sessionRunning;
+
+  const captureBtn = document.getElementById('capture-btn');
+  if (captureBtn) {
+    captureBtn.disabled = !sessionRunning;
+  }
+  if (!sessionRunning && capturing) {
+    capturing = false;
+    updateCaptureButton();
+  }
 }
 
 // ── RIB stats ──────────────────────────────────────────────────────────────
@@ -1052,7 +1083,7 @@ function renderRoutes(flashId) {
       <td class="id-cell">${escHtml(r.peer || '')}</td>
       <td class="match-cell">${renderMatch(r.match)}</td>
       <td>${renderActions(r.actions || [])}</td>
-      <td class="ts-cell" title="${escHtml(r.received_at || '')}">${relTime(r.received_at)}</td>
+      <td class="ts-cell" title="${escHtml(formatServerTime(r.received_at))}">${relTime(r.received_at)}</td>
     </tr>`,
     `<tr class="route-detail-row" id="detail-${escHtml(r.id)}">
       <td class="route-detail-cell" colspan="6">
@@ -1103,8 +1134,18 @@ function renderActions(actions) {
     else if (a.startsWith('redirect') || a.startsWith('rt-redirect') || a.startsWith('copy-to')) cls = 'action-redirect';
     else if (a.startsWith('mark'))                  cls = 'action-mark';
     else if (a.startsWith('unknown-flowspec'))       cls = 'action-unknown-ec';
-    return `<span class="action-badge ${cls}" title="${escHtml(a)}">${escHtml(a)}</span>`;
+    return `<span class="action-badge ${cls}" title="${escHtml(a)}">${escHtml(formatRateLimit(a))}</span>`;
   }).join('') || '<span style="color:var(--text3)">—</span>';
+}
+
+function formatRateLimit(a) {
+  const m = a.match(/^rate-limit=(\d+)(bps|pps)$/);
+  if (!m) return a;
+  const n = parseInt(m[1], 10);
+  if (n >= 1e9) return `rate-limit=${(n/1e9).toFixed(2).replace(/\.?0+$/, '')}G${m[2]}`;
+  if (n >= 1e6) return `rate-limit=${(n/1e6).toFixed(2).replace(/\.?0+$/, '')}M${m[2]}`;
+  if (n >= 1e3) return `rate-limit=${(n/1e3).toFixed(2).replace(/\.?0+$/, '')}K${m[2]}`;
+  return a;
 }
 
 function exportRoutes() {
@@ -1299,42 +1340,60 @@ function saveForm(config) {
 function restoreForm() {
   try {
     const saved = JSON.parse(localStorage.getItem('bgpx-config') || 'null');
-    if (!saved) return;
-    const map = {
-      'f-local-as': 'local_as', 'f-router-id': 'router_id',
-      'f-peer-ip':  'peer_ip',  'f-peer-as':   'peer_as',
-      'f-hold-time':'hold_time','f-reconnect':  'reconnect_delay',
-      'f-connect-timeout':'connect_timeout','f-active-retry':'active_retry_delay',
-      'f-json-output':'json_output','f-listen-port':'listen_port',
-    };
-    Object.entries(map).forEach(([elId, key]) => {
-      if (saved[key] != null) document.getElementById(elId).value = saved[key];
-    });
+    populateForm(saved);
   } catch (_) {}
+}
+
+function populateForm(config) {
+  if (!config) return;
+  const map = {
+    'f-local-as': 'local_as', 'f-router-id': 'router_id',
+    'f-peer-ip':  'peer_ip',  'f-peer-as':   'peer_as',
+    'f-hold-time':'hold_time','f-reconnect':  'reconnect_delay',
+    'f-connect-timeout':'connect_timeout','f-active-retry':'active_retry_delay',
+    'f-json-output':'json_output','f-listen-port':'listen_port',
+  };
+  Object.entries(map).forEach(([elId, key]) => {
+    if (config[key] != null) document.getElementById(elId).value = config[key];
+  });
+}
+
+function updateCaptureButton() {
+  const btn = document.getElementById('capture-btn');
+  if (btn) {
+    if (capturing) {
+      btn.textContent = '◉ Stop Capture';
+      btn.classList.add('capturing');
+    } else {
+      btn.textContent = '◉ Capture';
+      btn.classList.remove('capturing');
+    }
+  }
 }
 
 // ── Packet capture ─────────────────────────────────────────────────────────
 let capturing = false;
 
 async function toggleCapture() {
+  if (!sessionRunning) {
+    toast('No active session — start a BGP session first', 'error');
+    return;
+  }
   const btn = document.getElementById('capture-btn');
+  btn.disabled = true;
   try {
     if (!capturing) {
       const r    = await fetch('/capture/start', { method: 'POST' });
       const data = await r.json();
       if (!r.ok) { toast(data.error || 'Capture failed', 'error'); return; }
-      capturing = true;
-      btn.textContent = '◉ Stop Capture';
-      btn.classList.add('capturing');
       switchTab('log');
     } else {
       await fetch('/capture/stop', { method: 'POST' });
-      capturing = false;
-      btn.textContent = '◉ Capture';
-      btn.classList.remove('capturing');
     }
   } catch (e) {
     toast(String(e), 'error');
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -1354,7 +1413,11 @@ function relTime(iso) {
   if (sec <  60) return `${sec}s ago`;
   if (sec < 3600) return `${Math.floor(sec/60)}m ago`;
   if (sec < 86400) return `${Math.floor(sec/3600)}h ago`;
-  return d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  return formatServerTime(iso);
+}
+
+function formatServerTime(iso) {
+  return iso ? iso.replace(/T(\d{2}:\d{2}:\d{2})(?:\.\d+)?([+-]\d{2}:\d{2}|Z)/, ' $1 $2').replace(' Z', ' UTC') : '—';
 }
 
 function escHtml(s) {

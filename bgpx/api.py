@@ -77,6 +77,7 @@ async def _session_start(req: web.Request) -> web.Response:
 
 async def _session_stop(req: web.Request) -> web.Response:
     await req.app["manager"].stop()
+    await req.app["capture"].stop()
     return web.json_response({"ok": True})
 
 
@@ -115,11 +116,11 @@ async def _sse(req: web.Request) -> web.StreamResponse:
 
     # Push a snapshot first so the client can initialise without any polling.
     snapshot = {
-        "ts":      datetime.now(timezone.utc).isoformat(),
+        "ts":      datetime.now().astimezone().isoformat(),
         "type":    "snapshot",
         "level":   "info",
         "message": "snapshot",
-        "status":  manager.status(),
+        "status":  {**manager.status(), "capture_running": req.app["capture"].running},
         "routes":  rib.to_dict()["routes"],
     }
     await _write_sse(resp, snapshot)
