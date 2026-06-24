@@ -107,18 +107,12 @@ fi
 
 prompt_service() {
   # ponytail: prompt for service installation if running interactively as root and not explicitly set.
-  if [[ -z "${CREATE_SERVICE}" ]]; then
-    if [[ "${EUID}" -eq 0 && -t 0 ]]; then
-      local ans
-      read -r -p "Install and enable systemd service? [y/N]: " ans
-      if [[ "${ans}" =~ ^[Yy](es)?$ ]]; then
-        CREATE_SERVICE=1
-      else
-        CREATE_SERVICE=0
-      fi
-    else
-      CREATE_SERVICE=0
-    fi
+  [[ -n "${CREATE_SERVICE}" ]] && return
+  if [[ "${EUID}" -eq 0 && -t 0 ]]; then
+    read -r -p "Install and enable systemd service? [y/N]: " ans
+    [[ "${ans}" =~ ^[Yy] ]] && CREATE_SERVICE=1 || CREATE_SERVICE=0
+  else
+    CREATE_SERVICE=0
   fi
 }
 
