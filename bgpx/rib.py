@@ -4,7 +4,6 @@ import hashlib
 import json
 import logging
 import os
-import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -19,10 +18,10 @@ def _route_id(components: dict) -> str:
     return hashlib.sha1(canonical.encode()).hexdigest()[:12]
 
 
+# ponytail: threading.Lock removed because bgpx is purely single-threaded asyncio
 class FlowspecRIB:
     def __init__(self, json_output: Optional[str] = None):
         self._routes: dict[str, dict] = {}
-        self._lock = threading.Lock()
         self._json_output = json_output
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -47,9 +46,8 @@ class FlowspecRIB:
         }
         if path_attributes is not None:
             entry["path_attributes"] = path_attributes
-        with self._lock:
-            is_new = route_id not in self._routes
-            self._routes[route_id] = entry
+        is_new = route_id not in self._routes
+        self._routes[route_id] = entry
 
         verb = "ADD" if is_new else "UPDATE"
         log.info(f"RIB {verb} [{afi}] id={route_id} peer={peer} match={components} actions={actions}")
@@ -60,8 +58,7 @@ class FlowspecRIB:
         """Remove a route and return its id, or None if it was not present."""
         components = normalize_nlri_components(components)
         route_id = _route_id(components)
-        with self._lock:
-            removed = self._routes.pop(route_id, None)
+        removed = self._routes.pop(route_id, None)
         if removed:
             log.info(f"RIB DEL id={route_id} match={components}")
             self._persist()
@@ -69,36 +66,31 @@ class FlowspecRIB:
         return None
 
     def clear_peer(self, peer: str) -> int:
-        with self._lock:
-            keys = [k for k, v in self._routes.items() if v["peer"] == peer]
-            for k in keys:
-                del self._routes[k]
+        keys = [k for k, v in self._routes.items() if v["peer"] == peer]
+        for k in keys:
+            del self._routes[k]
         if keys:
             log.info(f"RIB cleared {len(keys)} route(s) from peer {peer}")
             self._persist()
         return len(keys)
 
     def all(self) -> list[dict]:
-        with self._lock:
-            return [self._normalized_route(r) for r in self._routes.values()]
+        return [self._normalized_route(r) for r in self._routes.values()]
 
     def by_afi(self, afi: str) -> list[dict]:
-        with self._lock:
-            return [
-                self._normalized_route(r)
-                for r in self._routes.values()
-                if r["afi"] == afi
-            ]
+        return [
+            self._normalized_route(r)
+            for r in self._routes.values()
+            if r["afi"] == afi
+        ]
 
     def get(self, route_id: str) -> Optional[dict]:
-        with self._lock:
-            route = self._routes.get(route_id)
-            return self._normalized_route(route) if route else None
+        route = self._routes.get(route_id)
+        return self._normalized_route(route) if route else None
 
     def clear_all(self) -> int:
-        with self._lock:
-            count = len(self._routes)
-            self._routes.clear()
+        count = len(self._routes)
+        self._routes.clear()
         if count:
             log.info(f"RIB cleared all {count} route(s)")
             self._persist()
@@ -108,8 +100,7 @@ class FlowspecRIB:
         self._json_output = path
 
     def to_dict(self) -> dict:
-        with self._lock:
-            routes = [self._normalized_route(r) for r in self._routes.values()]
+        routes = [self._normalized_route(r) for r in self._routes.values()]
         return {"count": len(routes), "routes": routes}
 
     # ── Internal ──────────────────────────────────────────────────────────────

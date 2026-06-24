@@ -1,13 +1,14 @@
 """Tests for BGP UPDATE path-attribute parsing."""
 
 import ipaddress
+import socket
 import struct
 
 from bgpx.constants import (
     AFI_IPV6, SAFI_FLOWSPEC,
     ATTR_MP_REACH_NLRI, ATTR_IPV6_EXT_COMMUNITIES,
 )
-from bgpx.message.parser import parse_update, parse_update_details
+from bgpx.message.parser import parse_open, parse_update, parse_update_details
 
 
 def _attr(flags: int, code: int, value: bytes) -> bytes:
@@ -67,3 +68,80 @@ def test_parse_update_details_retains_unknown_path_attribute_raw():
         "length": 3,
         "raw": "616263",
     }]
+
+
+def test_parse_open_decodes_4byte_asn_capability():
+    version = 4
+    my_as = 23456  # AS_TRANS
+    hold_time = 90
+    bgp_id = socket.inet_aton("192.0.2.1")
+
+    # Capability 65 (4-byte ASN) with value 123456
+    cap_code = 65
+    cap_len = 4
+    cap_value = struct.pack("!I", 123456)
+    cap = bytes([cap_code, cap_len]) + cap_value
+
+    # Parameter 2 (Capabilities) containing the capability
+    param_type = 2
+    param_len = len(cap)
+    param = bytes([param_type, param_len]) + cap
+
+    body = (
+        bytes([version]) +
+        struct.pack("!H", my_as) +
+        struct.pack("!H", hold_time) +
+        bgp_id +
+        bytes([len(param)]) +
+        param
+    )
+
+    res = parse_open(body)
+    assert res["version"] == 4
+    assert res["peer_as"] == 123456
+    assert res["hold_time"] == 90
+    assert res["router_id"] == "192.0.2.1"
+
+
+def test_parse_open_no_capabilities():
+    body = (
+        bytes([4]) +
+        struct.pack("!H", 65000) +
+        struct.pack("!H", 90) +
+        socket.inet_aton("192.0.2.1") +
+        bytes([0])  # opt_len = 0
+    )
+    res = parse_open(body)
+    assert res["peer_as"] == 65000
+
+
+def test_parse_open_other_capabilities_only():
+    # Capability 1 (Multiprotocol BGP) with some data
+    cap = bytes([1, 4, 0, 1, 0, 1])
+    param = bytes([2, len(cap)]) + cap
+    body = (
+        bytes([4]) +
+        struct.pack("!H", 65000) +
+        struct.pack("!H", 90) +
+        socket.inet_aton("192.0.2.1") +
+        bytes([len(param)]) +
+        param
+    )
+    res = parse_open(body)
+    assert res["peer_as"] == 65000
+
+
+def test_parse_open_truncated_4byte_asn_capability():
+    # Capability 65 (4-byte ASN) but length is 2 instead of 4 (malformed)
+    cap = bytes([65, 2, 0, 1])
+    param = bytes([2, len(cap)]) + cap
+    body = (
+        bytes([4]) +
+        struct.pack("!H", 23456) +
+        struct.pack("!H", 90) +
+        socket.inet_aton("192.0.2.1") +
+        bytes([len(param)]) +
+        param
+    )
+    res = parse_open(body)
+    assert res["peer_as"] == 23456  # Fallback to 2-byte AS

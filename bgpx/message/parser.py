@@ -66,11 +66,38 @@ def parse_header(data: bytes) -> tuple[int, int]:
 
 def parse_open(body: bytes) -> dict:
     """Parse a BGP OPEN message body and return a dict with peer info."""
+    version = body[0]
+    peer_as = struct.unpack("!H", body[1:3])[0]
+    hold_time = struct.unpack("!H", body[3:5])[0]
+    router_id = socket.inet_ntoa(body[5:9])
+
+    # Parse optional parameters for 4-byte ASN capability (RFC 6793)
+    # ponytail: parse 4-octet ASN capability if present in OPEN optional parameters
+    if len(body) > 10:
+        opt_len = body[9]
+        offset = 10
+        end = 10 + opt_len
+        while offset + 2 <= end and offset + 2 <= len(body):
+            param_type = body[offset]
+            param_len = body[offset + 1]
+            offset += 2
+            if param_type == 2:  # Capabilities (RFC 5492)
+                cap_offset = offset
+                cap_end = offset + param_len
+                while cap_offset + 2 <= cap_end and cap_offset + 2 <= len(body):
+                    cap_code = body[cap_offset]
+                    cap_len = body[cap_offset + 1]
+                    cap_offset += 2
+                    if cap_code == 65 and cap_len == 4 and cap_offset + 4 <= len(body):
+                        peer_as = struct.unpack("!I", body[cap_offset:cap_offset + 4])[0]
+                    cap_offset += cap_len
+            offset += param_len
+
     return {
-        "version":   body[0],
-        "peer_as":   struct.unpack("!H", body[1:3])[0],
-        "hold_time": struct.unpack("!H", body[3:5])[0],
-        "router_id": socket.inet_ntoa(body[5:9]),
+        "version":   version,
+        "peer_as":   peer_as,
+        "hold_time": hold_time,
+        "router_id": router_id,
     }
 
 
