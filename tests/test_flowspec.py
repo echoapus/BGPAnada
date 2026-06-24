@@ -188,3 +188,13 @@ def test_multiple_actions():
     actions = parse_ext_communities(ec)
     assert "discard" in actions
     assert "mark-dscp=46" in actions
+
+
+def test_legacy_redirect_to_ip_actions():
+    # Test (0x80, 0x0b) - legacy non-transitive redirect-to-ipv4
+    ec1 = bytes([0x80, 0x0b]) + ipaddress.IPv4Address("1.1.1.1").packed + b"\x00\x00"
+    assert parse_ext_communities(ec1) == ["redirect-to-ipv4=1.1.1.1"]
+
+    # Test (0x08, 0x00) - legacy transitive redirect-to-ipv4
+    ec2 = bytes([0x08, 0x00]) + ipaddress.IPv4Address("2.2.2.2").packed + b"\x00\x00"
+    assert parse_ext_communities(ec2) == ["redirect-to-ipv4=2.2.2.2"]

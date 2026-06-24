@@ -292,7 +292,7 @@ def parse_ext_communities(data: bytes) -> list[str]:
         elif (t, s) == EC_TRAFFIC_MARK:
             actions.append(f"mark-dscp={ec[7] & 0x3F}")
 
-        elif (t, s) == EC_REDIRECT_TO_IPV4:
+        elif (t, s) in (EC_REDIRECT_TO_IPV4, (0x80, 0x0b), (0x08, 0x00)):
             addr = ipaddress.IPv4Address(ec[2:6])
             flags = struct.unpack("!H", ec[6:8])[0]
             actions.append(_redirect_to_ip_action("ipv4", str(addr), flags))
