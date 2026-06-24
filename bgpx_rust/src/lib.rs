@@ -638,11 +638,13 @@ fn parse_prefix(data: &[u8], mut offset: usize, afi: u16) -> Result<(String, usi
         buf[..num_bytes].copy_from_slice(raw);
         let ip = Ipv6Addr::from(buf);
         ip.to_string()
-    } else {
+    } else if afi == AFI_IPV4 {
         let mut buf = [0u8; 4];
         buf[..num_bytes].copy_from_slice(raw);
         let ip = Ipv4Addr::from(buf);
         ip.to_string()
+    } else {
+        return Err(());
     };
 
     Ok((format!("{}/{}", addr_str, prefix_len), offset))
