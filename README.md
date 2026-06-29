@@ -289,3 +289,13 @@ Run the full Python fallback + Rust FFI test matrix:
 
 `test.sh` requires Cargo with cached/downloadable Rust dependencies. Node.js is
 optional; when present, the script also checks the embedded Web UI JavaScript.
+
+---
+
+## License
+
+PolyForm Noncommercial License 1.0.0.
+
+Personal study, research, testing, educational, charitable, public research,
+public safety/health, environmental, and government use are permitted. Commercial
+or company use requires written permission from the copyright holder.
