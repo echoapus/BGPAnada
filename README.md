@@ -1,6 +1,6 @@
 # bgpx
 
-BGP Unicast and FlowSpec Receiver — version 26.176
+BGP Unicast and FlowSpec Receiver — version 26.180
 
 Receives IPv4/IPv6 unicast routes and BGP Flowspec rules from a peer router,
 then maintains an in-memory RIB. A live web UI shows routes, analytics, events,

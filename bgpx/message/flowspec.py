@@ -15,15 +15,11 @@ from bgpx.constants import (
 
 def _parse_prefix(data: bytes, offset: int, afi: int) -> tuple[str, int]:
     prefix_len = data[offset]
-    offset += 1
     num_bytes = (prefix_len + 7) // 8
-    raw = data[offset:offset + num_bytes]
-    offset += num_bytes
-    if afi == AFI_IPV6:
-        addr = ipaddress.IPv6Address(raw.ljust(16, b'\x00'))
-    else:
-        addr = ipaddress.IPv4Address(raw.ljust(4, b'\x00'))
-    return f"{addr}/{prefix_len}", offset
+    raw = data[offset + 1:offset + 1 + num_bytes]
+    addr_cls = ipaddress.IPv6Address if afi == AFI_IPV6 else ipaddress.IPv4Address
+    addr = addr_cls(raw.ljust(16 if afi == AFI_IPV6 else 4, b'\x00'))
+    return f"{addr}/{prefix_len}", offset + 1 + num_bytes
 
 
 def _decode_op(op: int) -> tuple[bool, int, str]:
@@ -32,27 +28,14 @@ def _decode_op(op: int) -> tuple[bool, int, str]:
     Bit layout: E|A|len1|len0|reserved|LT|GT|EQ
     Returns (end_of_list, value_length_bytes, operator_symbol).
     """
-    end_of_list = bool(op & 0x80)
-    length = 1 << ((op >> 4) & 0x03)   # 1, 2, 4, or 8 bytes
-    lt = bool(op & 0x04)
-    gt = bool(op & 0x02)
-    eq = bool(op & 0x01)
-    sym = ("" + ("<" if lt else "") + (">" if gt else "") + ("=" if eq else "")) or "?"
-    return end_of_list, length, sym
+    sym = ("" + ("<" if op & 0x04 else "") + (">" if op & 0x02 else "") + ("=" if op & 0x01 else "")) or "?"
+    return bool(op & 0x80), 1 << ((op >> 4) & 0x03), sym
 
 
 def _decode_bitmask_op(op: int) -> tuple[bool, int, str]:
     """Decode a bitmask operator byte used by TCP flags and fragment."""
-    end_of_list = bool(op & 0x80)
-    length = 1 << ((op >> 4) & 0x03)
-    negated = bool(op & 0x02)
-    match_all = bool(op & 0x01)
-
-    if match_all:
-        opname = "not-all" if negated else "all"
-    else:
-        opname = "none" if negated else "any"
-    return end_of_list, length, opname
+    opname = ("not-all" if op & 0x02 else "all") if op & 0x01 else ("none" if op & 0x02 else "any")
+    return bool(op & 0x80), 1 << ((op >> 4) & 0x03), opname
 
 
 def _component_name(ftype: int, afi: int) -> str:
@@ -231,23 +214,12 @@ def _fragment_flag_names(value: int) -> list[str]:
 
 def parse_nlri_list(payload: bytes, afi: int = AFI_IPV4) -> list[dict]:
     """Parse a sequence of length-prefixed flowspec NLRIs from an MP_REACH/UNREACH payload."""
-    routes: list[dict] = []
-    offset = 0
-
+    routes, offset = [], 0
     while offset < len(payload):
-        # RFC 8955 §4.3: length < 0xF0 → 1 byte; otherwise 2 bytes (high nibble = 0xF)
         first = payload[offset]
-        if first < 0xF0:
-            nlri_len = first
-            offset += 1
-        else:
-            nlri_len = ((first & 0x0F) << 8) | payload[offset + 1]
-            offset += 2
-
-        raw = payload[offset:offset + nlri_len]
+        nlri_len, offset = (first, offset + 1) if first < 0xF0 else (((first & 0x0F) << 8) | payload[offset + 1], offset + 2)
+        routes.append(parse_nlri_components(payload[offset:offset + nlri_len], afi))
         offset += nlri_len
-        routes.append(parse_nlri_components(raw, afi))
-
     return routes
 
 
@@ -263,7 +235,7 @@ def parse_ext_communities(data: bytes) -> list[str]:
 
         if (t, s) == EC_TRAFFIC_RATE_BYTES:
             rate = struct.unpack("!f", ec[4:8])[0]
-            actions.append("discard" if rate == 0.0 else f"rate-limit={rate:.0f}bps")
+            actions.append("discard" if rate == 0.0 else f"rate-limit={rate * 8:.0f}bps")
 
         elif (t, s) == EC_TRAFFIC_RATE_PACKETS:
             rate = struct.unpack("!f", ec[4:8])[0]

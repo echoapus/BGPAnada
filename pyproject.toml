@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bgpx"
-version = "26.176"
+version = "26.180"
 description = "BGP IPv4/IPv6 Unicast and FlowSpec Receiver with web UI"
 requires-python = ">=3.11"
 dependencies = ["aiohttp>=3.9"]

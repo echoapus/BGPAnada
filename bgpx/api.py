@@ -28,6 +28,8 @@ def create_app(manager, rib, events, capture) -> web.Application:
     app.router.add_post("/capture/start",    _capture_start)
     app.router.add_post("/capture/stop",     _capture_stop)
     app.router.add_delete("/log",            _log_clear)
+    app.router.add_get("/routes",             _routes)
+    app.router.add_get("/routes/export",      _routes_export)
     app.router.add_get("/events",            _sse)
     app.router.add_get("/health",            _health)
 
@@ -100,6 +102,44 @@ async def _log_clear(req: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def _routes(req: web.Request) -> web.Response:
+    try:
+        page = int(req.query.get("page", 1))
+        page_size = int(req.query.get("page_size", 50))
+    except ValueError:
+        return _err("page and page_size must be integers", 400)
+    family = req.query.get("family", "total")
+    if family not in ("total", "unicast", "flowspec"):
+        return _err("invalid family", 400)
+    return web.json_response(req.app["rib"].page(
+        family=family,
+        page=page,
+        page_size=page_size,
+        sort=req.query.get("sort", "received_at"),
+        ascending=req.query.get("order", "desc") == "asc",
+    ))
+
+
+async def _routes_export(req: web.Request) -> web.StreamResponse:
+    family = req.query.get("family", "total")
+    if family not in ("total", "unicast", "flowspec"):
+        return _err("invalid family", 400)
+    resp = web.StreamResponse(headers={
+        "Content-Type": "application/json",
+        "Content-Disposition": 'attachment; filename="bgpx-routes.json"',
+    })
+    await resp.prepare(req)
+    await resp.write(b'{"routes":[')
+    first = True
+    for route in req.app["rib"].iter_routes(family):
+        if not first:
+            await resp.write(b",")
+        first = False
+        await resp.write(json.dumps(route, separators=(",", ":")).encode())
+    await resp.write(b"]}")
+    return resp
+
+
 # ── SSE stream ────────────────────────────────────────────────────────────────
 
 async def _sse(req: web.Request) -> web.StreamResponse:
@@ -114,14 +154,14 @@ async def _sse(req: web.Request) -> web.StreamResponse:
     bus     = req.app["events"]
     q       = bus.subscribe()
 
-    # Push a snapshot first so the client can initialise without any polling.
+    # Push only status and counters; route pages are fetched separately.
     snapshot = {
         "ts":      datetime.now().astimezone().isoformat(),
         "type":    "snapshot",
         "level":   "info",
         "message": "snapshot",
         "status":  {**manager.status(), "capture_running": req.app["capture"].running},
-        "routes": rib.to_dict()["routes"],
+        "stats":   rib.stats(),
     }
     await _write_sse(resp, snapshot)
 

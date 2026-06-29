@@ -1,4 +1,4 @@
-# bgpx 26.176 Installation Guide
+# bgpx 26.180 Installation Guide
 
 ## Prerequisites
 

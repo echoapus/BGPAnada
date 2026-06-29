@@ -662,7 +662,7 @@ body {
 <!-- ── Header ── -->
 <header class="header">
   <span class="logo">bgpx</span>
-  <span class="version">v26.176</span>
+  <span class="version">v26.180</span>
   <div class="header-spacer"></div>
   <div id="sse-dot" class="sse-dot reconnecting" title="SSE stream: connecting…"></div>
   <div class="state-badge" id="state-badge">
@@ -882,7 +882,9 @@ function updateThemeButton(isLight) {
 })();
 
 // ── State ──────────────────────────────────────────────────────────────────
-const routeMap = new Map();       // route_id → route object
+let routeRows       = [];         // current server-side page only
+let routeTotal      = 0;
+let ribStats        = { total:0, unicast:0, flowspec:0, ipv4:0, ipv6:0, analytics:{} };
 let sessionRunning  = false;
 let logCount        = 0;
 let autoScroll      = true;
@@ -934,7 +936,7 @@ function switchTab(name) {
     currentView = name;
     currentPage = 1;
     document.getElementById('tab-routes').classList.add('active');
-    renderRoutes();
+    loadRoutes();
   } else {
     document.getElementById('tab-' + name).classList.add('active');
     if (name === 'analytics') renderAnalytics();
@@ -984,12 +986,10 @@ function setSseDot(state) {
 function handleSnapshot(event) {
   const s = event.status || {};
 
-  // Rebuild routeMap from snapshot
-  routeMap.clear();
   currentPage = 1;
   announceCount = 0;
   withdrawCount = 0;
-  (event.routes || []).forEach(r => routeMap.set(r.id, r));
+  ribStats = event.stats || ribStats;
 
   // Update session state
   sessionRunning = s.running || false;
@@ -1004,46 +1004,25 @@ function handleSnapshot(event) {
   updatePeerLabel(s);
   updatePeerInfo(s.peer_info || {});
   updateFormState();
-  renderRoutes();
   updateRibStats();
+  loadRoutes();
 }
 
 // ── Live event handler ─────────────────────────────────────────────────────
 function handleLiveEvent(event) {
   if (event.type === 'announce' && event.route_id) {
-    const existing = routeMap.has(event.route_id);
-    const route = {
-      id:             event.route_id,
-      family:         event.family || (String(event.afi).endsWith('-unicast') ? 'unicast' : 'flowspec'),
-      afi:            event.afi,
-      peer:           event.peer,
-      received_at:    event.ts,
-      prefix:         event.prefix,
-      next_hop:       event.next_hop,
-      as_path:        event.as_path || [],
-      communities:    event.communities || [],
-      match:          event.match   || {},
-      actions:        event.actions || [],
-      path_attributes:event.path_attributes,
-    };
-    routeMap.set(event.route_id, route);
-    queueRender(existing ? event.route_id : null);
-    updateRibStats();
+    queueRouteReload(event.route_id);
   }
 
   else if (event.type === 'withdraw' && event.route_id) {
-    routeMap.delete(event.route_id);
-    queueRender();
-    updateRibStats();
+    queueRouteReload();
   }
 
   else if (event.type === 'session') {
     if (event.state !== undefined) {
       updateStateBadge(event.state);
       if (event.state === 'IDLE') {
-        routeMap.clear();
-        renderRoutes();
-        updateRibStats();
+        clearRoutes();
         sessionRunning = false;
         updateFormState();
       }
@@ -1055,9 +1034,7 @@ function handleLiveEvent(event) {
       if (event.running) {
         populateForm(event);
       } else {
-        routeMap.clear();
-        renderRoutes();
-        updateRibStats();
+        clearRoutes();
         updatePeerInfo({});
       }
     }
@@ -1128,15 +1105,12 @@ function updateFormState() {
 
 // ── RIB stats ──────────────────────────────────────────────────────────────
 function updateRibStats() {
-  const routes = [...routeMap.values()];
-  const unicast = routes.filter(r => r.family === 'unicast').length;
-  const flowspec = routes.filter(r => r.family === 'flowspec').length;
-  setStat('s-total', routeMap.size);
-  setStat('s-unicast', unicast);
-  setStat('s-flowspec', flowspec);
-  document.getElementById('total-count').textContent = routeMap.size;
-  document.getElementById('unicast-count').textContent = unicast;
-  document.getElementById('flowspec-count').textContent = flowspec;
+  setStat('s-total', ribStats.total || 0);
+  setStat('s-unicast', ribStats.unicast || 0);
+  setStat('s-flowspec', ribStats.flowspec || 0);
+  document.getElementById('total-count').textContent = ribStats.total || 0;
+  document.getElementById('unicast-count').textContent = ribStats.unicast || 0;
+  document.getElementById('flowspec-count').textContent = ribStats.flowspec || 0;
   renderAnalytics();
 }
 
@@ -1147,61 +1121,22 @@ function setStat(id, val) {
 }
 
 function renderAnalytics() {
-  const routes = [...routeMap.values()];
-  const unicast = routes.filter(r => r.family === 'unicast');
-  const flowspec = routes.filter(r => r.family === 'flowspec');
-  const ipv4 = routes.filter(r => String(r.afi).startsWith('ipv4')).length;
-  const ipv6 = routes.length - ipv4;
-  const communityCounts = new Map();
-  const originCounts = new Map();
-  const nextHopCounts = new Map();
-  const prefixLengthCounts = new Map();
-  const actionCounts = new Map();
-  const protocolCounts = new Map();
-  const portCounts = new Map();
-
-  unicast.forEach(route => {
-    countValues(communityCounts, route.communities || []);
-    const path = route.as_path || [];
-    if (path.length) {
-      const origin = String(path[path.length - 1]);
-      countValues(originCounts, [origin]);
-    }
-    if (route.next_hop) countValues(nextHopCounts, [route.next_hop]);
-    const prefixLength = String(route.prefix || '').split('/')[1];
-    if (prefixLength) countValues(prefixLengthCounts, [`/${prefixLength}`]);
-  });
-
-  flowspec.forEach(route => {
-    countValues(actionCounts, route.actions || []);
-    countValues(protocolCounts, route.match?.['ip-proto'] || []);
-    countValues(portCounts, [
-      ...(route.match?.port || []),
-      ...(route.match?.['src-port'] || []),
-      ...(route.match?.['dst-port'] || []),
-    ]);
-  });
-
-  document.getElementById('a-total').textContent = routes.length;
-  document.getElementById('a-unicast').textContent = unicast.length;
-  document.getElementById('a-flowspec').textContent = flowspec.length;
-  document.getElementById('a-afi').innerHTML = `IPv4 ${ipv4}<br>IPv6 ${ipv6}`;
+  const a = ribStats.analytics || {};
+  document.getElementById('a-total').textContent = ribStats.total || 0;
+  document.getElementById('a-unicast').textContent = ribStats.unicast || 0;
+  document.getElementById('a-flowspec').textContent = ribStats.flowspec || 0;
+  document.getElementById('a-afi').innerHTML = `IPv4 ${ribStats.ipv4 || 0}<br>IPv6 ${ribStats.ipv6 || 0}`;
   document.getElementById('a-events').innerHTML = `Announce ${announceCount}<br>Withdraw ${withdrawCount}`;
-  document.getElementById('a-communities').innerHTML = renderCountBars(communityCounts);
-  document.getElementById('a-origin-as').innerHTML = renderCountBars(originCounts, 'AS');
-  document.getElementById('a-next-hops').innerHTML = renderCountBars(nextHopCounts);
-  document.getElementById('a-prefix-lengths').innerHTML = renderCountBars(prefixLengthCounts);
-  document.getElementById('a-actions').innerHTML = renderCountBars(actionCounts);
-  document.getElementById('a-protocols').innerHTML = renderCountBars(protocolCounts);
-  document.getElementById('a-ports').innerHTML = renderCountBars(portCounts);
+  document.getElementById('a-communities').innerHTML = renderCountBars(a.communities);
+  document.getElementById('a-origin-as').innerHTML = renderCountBars(a.origin_as, 'AS');
+  document.getElementById('a-next-hops').innerHTML = renderCountBars(a.next_hops);
+  document.getElementById('a-prefix-lengths').innerHTML = renderCountBars(a.prefix_lengths);
+  document.getElementById('a-actions').innerHTML = renderCountBars(a.actions);
+  document.getElementById('a-protocols').innerHTML = renderCountBars(a.protocols);
+  document.getElementById('a-ports').innerHTML = renderCountBars(a.ports);
 }
 
-function countValues(counts, values) {
-  values.forEach(value => counts.set(String(value), (counts.get(String(value)) || 0) + 1));
-}
-
-function renderCountBars(counts, prefix='') {
-  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+function renderCountBars(rows=[], prefix='') {
   const max = rows[0]?.[1] || 1;
   return rows.length
     ? rows.map(([name, count]) => `
@@ -1214,24 +1149,48 @@ function renderCountBars(counts, prefix='') {
 }
 
 // ── Routes table ───────────────────────────────────────────────────────────
-// ponytail: rendering throttling to prevent redraw storms during high-frequency BGP updates
-let renderPending = false;
+// ponytail: refresh at most once per second during an update burst
+let reloadTimer = null;
 let pendingFlashId = null;
+let routeRequest = 0;
 
-function queueRender(flashId) {
+function queueRouteReload(flashId) {
   if (flashId) pendingFlashId = flashId;
-  if (renderPending) return;
-  renderPending = true;
-  requestAnimationFrame(() => {
-    renderRoutes(pendingFlashId);
-    renderPending = false;
+  if (reloadTimer) return;
+  reloadTimer = setTimeout(() => {
+    reloadTimer = null;
+    loadRoutes(pendingFlashId);
     pendingFlashId = null;
+  }, 1000);
+}
+
+async function loadRoutes(flashId) {
+  const request = ++routeRequest;
+  const params = new URLSearchParams({
+    family: currentView,
+    page: currentPage,
+    page_size: pageSize,
+    sort: sortCol,
+    order: sortAsc ? 'asc' : 'desc',
   });
+  try {
+    const response = await fetch('/routes?' + params);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || response.statusText);
+    if (request !== routeRequest) return;
+    routeRows = data.routes || [];
+    routeTotal = data.count || 0;
+    ribStats = data.stats || ribStats;
+    updateRibStats();
+    renderRoutes(flashId);
+  } catch (e) {
+    document.getElementById('page-info').textContent = 'Route load failed';
+  }
 }
 
 function renderRoutes(flashId) {
   const tbody  = document.getElementById('routes-tbody');
-  const routes = filteredRoutes();
+  const routes = routeRows;
   renderRouteHeader();
 
   if (!routes.length) {
@@ -1242,26 +1201,14 @@ function renderRoutes(flashId) {
     return;
   }
 
-  routes.sort((a, b) => {
-    let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
-    if (typeof va === 'string') va = va.toLowerCase();
-    if (typeof vb === 'string') vb = vb.toLowerCase();
-    if (va < vb) return sortAsc ? -1 : 1;
-    if (va > vb) return sortAsc ?  1 : -1;
-    return 0;
-  });
-
-  // ponytail: calculate pagination range
-  const totalRoutes = routes.length;
+  const totalRoutes = routeTotal;
   const totalPages = Math.ceil(totalRoutes / pageSize);
   if (currentPage > totalPages) currentPage = totalPages || 1;
   if (currentPage < 1) currentPage = 1;
 
   const startIdx = (currentPage - 1) * pageSize;
   const endIdx = Math.min(startIdx + pageSize, totalRoutes);
-  const pageRoutes = routes.slice(startIdx, endIdx);
-
-  tbody.innerHTML = pageRoutes.flatMap(r => [
+  tbody.innerHTML = routes.flatMap(r => [
     renderRouteRow(r, flashId),
     `<tr class="route-detail-row" id="detail-${escHtml(r.id)}">
       <td class="route-detail-cell" colspan="${routeColumnCount()}">
@@ -1280,15 +1227,15 @@ function renderRoutes(flashId) {
 function prevPage() {
   if (currentPage > 1) {
     currentPage--;
-    renderRoutes();
+    loadRoutes();
   }
 }
 
 function nextPage() {
-  const totalPages = Math.ceil(filteredRoutes().length / pageSize);
+  const totalPages = Math.ceil(routeTotal / pageSize);
   if (currentPage < totalPages) {
     currentPage++;
-    renderRoutes();
+    loadRoutes();
   }
 }
 
@@ -1297,17 +1244,11 @@ function toggleRouteDetail(id) {
   if (row) row.classList.toggle('open');
 }
 
-function filteredRoutes() {
-  const routes = [...routeMap.values()];
-  if (currentView === 'unicast') return routes.filter(r => r.family === 'unicast');
-  if (currentView === 'flowspec') return routes.filter(r => r.family === 'flowspec');
-  return routes;
-}
-
 function sortRoutes(col) {
   if (sortCol === col) sortAsc = !sortAsc;
   else { sortCol = col; sortAsc = true; }
-  renderRoutes();
+  currentPage = 1;
+  loadRoutes();
 }
 
 function sortableHeader(label, col) {
@@ -1430,14 +1371,7 @@ function formatRateLimit(a) {
 }
 
 function exportRoutes() {
-  const routes = filteredRoutes();
-  const data = JSON.stringify({ count: routes.length, routes }, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = 'bgpx-routes.json';
-  a.click();
-  URL.revokeObjectURL(url);
+  window.location.href = '/routes/export?family=' + encodeURIComponent(currentView);
 }
 
 // ── Live Log ───────────────────────────────────────────────────────────────
@@ -1464,7 +1398,9 @@ function appendLogEntry(event) {
   if (empty) empty.style.display = 'none';
   if (event.type === 'announce') announceCount++;
   if (event.type === 'withdraw') withdrawCount++;
-  renderAnalytics();
+  document.getElementById('a-events').innerHTML = `Announce ${announceCount}<br>Withdraw ${withdrawCount}`;
+  if ((event.type === 'announce' || event.type === 'withdraw')
+      && !document.getElementById('tab-log').classList.contains('active')) return;
 
   const entry = document.createElement('div');
   entry.className = 'log-entry' + (matchesFilter(event.type, event.level) ? '' : ' hidden');
@@ -1572,15 +1508,22 @@ async function stopSession() {
     await fetch('/session/stop', { method: 'POST' });
     toast('Session stopped', 'ok');
     sessionRunning = false;
-    routeMap.clear();
-    renderRoutes();
-    updateRibStats();
+    clearRoutes();
     updatePeerInfo({});
     updateFormState();
   } catch (e) {
     toast(String(e), 'error');
     document.getElementById('stop-btn').disabled = false;
   }
+}
+
+function clearRoutes() {
+  routeRows = [];
+  routeTotal = 0;
+  ribStats = { total:0, unicast:0, flowspec:0, ipv4:0, ipv6:0, analytics:{} };
+  currentPage = 1;
+  renderRoutes();
+  updateRibStats();
 }
 
 function collectConfig() {

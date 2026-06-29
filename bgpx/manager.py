@@ -58,6 +58,7 @@ class SessionManager:
                 pass
         self._session = None
         self._task    = None
+        self._rib.flush()
         self._events.emit("session", "info", "BGP session stopped", running=False)
         log.info("Session stopped")
 
