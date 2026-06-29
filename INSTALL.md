@@ -94,6 +94,9 @@ Install and enable a systemd service:
 sudo ./deploy.sh --service --web-port 8080
 ```
 
+When `--service` is used, deployment reloads systemd, enables and starts
+`bgpx.service`, then prints `systemctl status bgpx.service` before exiting.
+
 Allow the installed virtualenv Python to bind privileged ports such as BGP port 179:
 ```bash
 sudo ./deploy.sh --cap-net-bind-service
@@ -103,6 +106,10 @@ Common combined production install:
 ```bash
 sudo ./deploy.sh --rust --service --cap-net-bind-service --web-port 8080
 ```
+
+For safety, `deploy.sh` refuses broad install targets such as `/`, `/opt`,
+`/usr`, `/var`, and `/home`. Use a dedicated directory such as `/opt/bgpx` or
+`/opt/custom-bgpx`.
 
 After deployment:
 ```bash
@@ -326,6 +333,18 @@ To switch back to Python and remove the installed `.so`:
 sudo ./deploy.sh
 ```
 
+### Issue: FlowSpec rate-limit looks 8x too small
+
+RFC 8955 encodes `traffic-rate-bytes` as bytes/second. bgpx renders that action
+as network bits/second, so `12500` bytes/second is shown as
+`rate-limit=100000bps` in JSON and `100Kbps` in the UI. If you still see
+`rate-limit=12500bps` after deploying with `--rust`, redeploy so the installed
+Rust FFI library is rebuilt:
+
+```bash
+sudo ./deploy.sh --rust
+```
+
 ---
 
 ## Docker Advanced Usage
@@ -368,11 +387,10 @@ The recommended systemd path is to let `deploy.sh` generate the unit:
 
 ```bash
 sudo ./deploy.sh --service --cap-net-bind-service --web-port 8080
-sudo systemctl start bgpx
-sudo systemctl status bgpx
 ```
 
-The generated service uses `/opt/bgpx/app` as the working directory and starts:
+The script enables, starts, and prints status for `bgpx.service`. The generated
+service uses `/opt/bgpx/app` as the working directory and starts:
 
 ```bash
 /opt/bgpx/venv/bin/bgpx --host 0.0.0.0 --port <selected-web-port>
@@ -428,7 +446,12 @@ Use `uninstall.sh` to remove a deployment created by `deploy.sh`:
 sudo ./uninstall.sh
 ```
 
-The script shows a removal plan and asks for confirmation. It stops and disables `bgpx.service` when present, removes `/etc/systemd/system/bgpx.service`, removes `/usr/local/bin/bgpx` only when it points into the selected install directory, and removes `/opt/bgpx`. It does not modify the source checkout or local Cargo build cache.
+The script shows a removal plan and asks for confirmation. It stops and disables
+`bgpx.service` when present, removes `/etc/systemd/system/bgpx.service`, removes
+`/usr/local/bin/bgpx` only when it is a symlink pointing into the selected
+install directory, and removes `/opt/bgpx`. It refuses broad install targets
+such as `/`, `/opt`, `/usr`, `/var`, and `/home`. It does not modify the source
+checkout or local Cargo build cache.
 
 Noninteractive uninstall:
 

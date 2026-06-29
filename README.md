@@ -13,12 +13,12 @@ and packet captures in real time via Server-Sent Events.
 - **Dual-mode connection** — races active-connect and passive-accept simultaneously; whichever succeeds first wins
 - **IPv4 and IPv6 FlowSpec** — all NLRI component types (prefix, port, protocol, TCP flags, DSCP, fragment, flow-label)
 - **IPv4 and IPv6 unicast** — prefix, next hop, AS path, standard/well-known/large communities
-- **All standard FlowSpec actions** — rate-limit (bps/pps), discard, redirect-to-VRF (AS2/IPv4/AS4), redirect-to-IP (IPv4/IPv6), DSCP mark, traffic-action
+- **All standard FlowSpec actions** — rate-limit in network units (bps/pps), discard, redirect-to-VRF (AS2/IPv4/AS4), redirect-to-IP (IPv4/IPv6), DSCP mark, traffic-action
 - **Unknown-FlowSpec-EC detection** — vendor or future-IANA extended communities in the FlowSpec EC range are flagged distinctly
 - **4-byte ASN support** — `AS_TRANS`, `CAP_4BYTE_ASN`, `AS4_PATH` (RFC 6793)
 - **Hold timer enforcement** — session resets if no message arrives within the negotiated hold time
-- **JSON RIB persistence** — atomic file write on every RIB change (optional)
-- **Web UI** — SSE-driven, no polling; sortable routes table, live log with filter chips, packet capture viewer
+- **JSON RIB persistence** — debounced atomic file writes after RIB changes (optional)
+- **Web UI** — SSE-driven status/events with server-side route pages; sortable routes table, live log with filter chips, packet capture viewer
 - **Docker-ready**
 
 > **⚠️ BGP Session: IPv4 only**
@@ -54,6 +54,8 @@ sudo ./deploy.sh
 
 The deploy script installs from a copied source tree into a virtualenv and
 verifies both the packaged Web UI and the selected Python/Rust parser engine.
+With `--service`, it enables and starts `bgpx.service` and prints the service
+status before exiting.
 
 The deploy script asks which port the Web UI should bind to. Press Enter to use `8080`, or pass the port noninteractively:
 
@@ -129,7 +131,7 @@ bgpx --local-as 65001 --router-id 10.0.0.1 \
 | `--reconnect-delay` | `5` | Seconds to wait before reconnecting |
 | `--connect-timeout` | `5.0` | TCP connect timeout in seconds |
 | `--active-retry-delay` | `1.0` | Delay between active connect attempts |
-| `--json-output` | — | Write RIB to this JSON file on every change |
+| `--json-output` | — | Write RIB to this JSON file after route changes |
 | `--host` | `0.0.0.0` | Web UI listen address |
 | `--port` | `8080` | Web UI listen port |
 | `--log-level` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
@@ -147,7 +149,9 @@ Open `http://localhost:8080` in a browser.
 
 If installed with `deploy.sh`, use the Web UI port selected during deployment. The default is `8080`.
 
-All data is pushed via **Server-Sent Events** — no polling, no page refresh needed.
+Session state, counters, and events are pushed via **Server-Sent Events**.
+Route table pages are fetched on demand and refreshed after BGP updates, so the
+UI can handle larger RIBs without sending every route in the SSE snapshot.
 
 | Panel | Description |
 |---|---|
@@ -169,7 +173,8 @@ The header shows:
 
 ## JSON RIB format
 
-When `--json-output` is set, bgpx writes the RIB atomically on every change:
+When `--json-output` is set, bgpx writes the RIB atomically after route-change
+bursts and flushes pending output on session stop:
 
 ```json
 {
@@ -205,6 +210,11 @@ When `--json-output` is set, bgpx writes the RIB atomically on every change:
 }
 ```
 
+FlowSpec `traffic-rate-bytes` communities are decoded per RFC 8955 as
+bytes/second and rendered as network bits/second. For example, a router rate of
+`0.1Mbps` appears as `rate-limit=100000bps` in JSON and `100Kbps` in the UI.
+`traffic-rate-packets` remains packets/second (`pps`).
+
 ---
 
 ## Architecture
@@ -215,10 +225,10 @@ When `--json-output` is set, bgpx writes the RIB atomically on every change:
 │   ├── cli.py          Entry point and component wiring
 │   ├── manager.py      Session start/stop/restart
 │   ├── session.py      BGP FSM and UPDATE dispatch
-│   ├── rib.py          Unicast/FlowSpec RIB and JSON persistence
+│   ├── rib.py          Unicast/FlowSpec RIB, stats, pagination, JSON persistence
 │   ├── events.py       Event history and SSE subscribers
 │   ├── capture.py      tcpdump subprocess wrapper
-│   ├── api.py          aiohttp UI, commands, SSE, and health endpoint
+│   ├── api.py          aiohttp UI, commands, route pages/export, SSE, health
 │   ├── message/
 │   │   ├── parser.py   Python parser and optional Rust FFI loading
 │   │   ├── builder.py  OPEN, KEEPALIVE, and NOTIFICATION builders
@@ -240,7 +250,7 @@ When `--json-output` is set, bgpx writes the RIB atomically on every change:
 | RFC 4360 | BGP Extended Communities | ✅ |
 | RFC 4760 | MP-BGP / IPv6 Unicast | ✅ |
 | RFC 6793 | 4-Byte ASN | OPEN capability, AS_PATH and AS4_PATH ✅ |
-| RFC 8955 | IPv4 FlowSpec | ✅ All component types and actions |
+| RFC 8955 | IPv4 FlowSpec | ✅ All component types and actions; traffic-rate bytes converted to bps for display |
 | RFC 8956 | IPv6 FlowSpec | ✅ All component types and actions |
 
 ---
