@@ -224,7 +224,7 @@ tar \
 
 if [[ "${USE_RUST}" -eq 1 ]]; then
   "${VENV_DIR}/bin/python" -m pip install --quiet maturin
-  maturin build --release \
+  "${VENV_DIR}/bin/python" -m maturin build --release \
     --manifest-path "${RUST_BUILD_DIR}/Cargo.toml" \
     --interpreter "${VENV_DIR}/bin/python" \
     --out "${RUST_BUILD_DIR}/wheels"
