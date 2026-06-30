@@ -1,6 +1,6 @@
 # bgpx
 
-BGP Unicast and FlowSpec receiver with a live web UI.  
+BGP Unicast and FlowSpec receiver with a live web UI — version 26.181.  
 Connects to a peer router, maintains an in-memory RIB, and streams everything to the browser via Server-Sent Events.
 
 ```bash
