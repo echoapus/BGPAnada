@@ -8,37 +8,37 @@
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg0:       #0d1117;
-  --bg1:       #161b22;
-  --bg2:       #21262d;
-  --bg3:       #2d333b;
-  --border:    #30363d;
-  --text:      #e6edf3;
-  --text2:     #8b949e;
-  --text3:     #484f58;
-  --accent:    #58a6ff;
-  --green:     #3fb950;
-  --yellow:    #d29922;
-  --red:       #f85149;
-  --orange:    #e3b341;
-  --purple:    #bc8cff;
+  --bg0:       #2c2f2e;
+  --bg1:       #353836;
+  --bg2:       #404342;
+  --bg3:       #4a4d4b;
+  --border:    #585b59;
+  --text:      #f1ede7;
+  --text2:     #c6c0b8;
+  --text3:     #918b83;
+  --accent:    #8ea29b;
+  --green:     #8ca08a;
+  --yellow:    #b7a06d;
+  --red:       #b58d87;
+  --orange:    #c09a7f;
+  --purple:    #a99caf;
   --mono:      "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
 }
 html.light-theme {
-  --bg0:       #ffffff;
-  --bg1:       #f6f8fa;
-  --bg2:       #eaeef2;
-  --bg3:       #d0d7de;
-  --border:    #d0d7de;
-  --text:      #1f2328;
-  --text2:     #656d76;
-  --text3:     #8c959f;
-  --accent:    #0969da;
-  --green:     #1a7f37;
-  --yellow:    #9a6700;
-  --red:       #d1242f;
-  --orange:    #bc4c00;
-  --purple:    #8250df;
+  --bg0:       #f3eee7;
+  --bg1:       #ebe4db;
+  --bg2:       #e2dbd1;
+  --bg3:       #d2c9be;
+  --border:    #c8beb3;
+  --text:      #3f3934;
+  --text2:     #6f6760;
+  --text3:     #9a9289;
+  --accent:    #7f938d;
+  --green:     #869a84;
+  --yellow:    #b59f70;
+  --red:       #b48d87;
+  --orange:    #bf997d;
+  --purple:    #9e91a7;
 }
 html, body { height: 100%; }
 body {
@@ -200,16 +200,16 @@ body {
 .btn:disabled { opacity: .4; cursor: not-allowed; }
 .btn-start {
   background: var(--green);
-  color: #000;
+  color: var(--bg0);
   border-color: var(--green);
 }
-.btn-start:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-start:hover:not(:disabled) { filter: brightness(1.05); }
 .btn-stop {
   background: transparent;
   color: var(--red);
   border-color: var(--red);
 }
-.btn-stop:hover:not(:disabled) { background: rgba(248,81,73,.12); }
+.btn-stop:hover:not(:disabled) { background: rgba(181,141,135,.14); }
 
 /* ── Stats ── */
 .stat-row {
@@ -298,7 +298,7 @@ body {
   min-width: 18px;
   text-align: center;
 }
-.tab-btn.active .tab-count { background: rgba(88,166,255,.15); color: var(--accent); }
+.tab-btn.active .tab-count { background: rgba(142,162,155,.16); color: var(--accent); }
 
 .tab-spacer { flex: 1; }
 .icon-btn {
@@ -314,12 +314,12 @@ body {
 }
 .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
 .icon-btn.capturing {
-  border-color: #f97316;
-  color: #f97316;
+  border-color: var(--orange);
+  color: var(--orange);
   animation: pulse .8s infinite;
 }
-.badge-capture { background: rgba(249,115,22,.15); color: #f97316; }
-.badge-packet  { background: rgba(34,211,238,.12); color: #22d3ee; }
+.badge-capture { background: rgba(192,154,127,.16); color: var(--orange); }
+.badge-packet  { background: rgba(142,162,155,.16); color: var(--accent); }
 
 /* ── Tab content ── */
 .tab-content { display: none; flex: 1; overflow: hidden; }
@@ -349,7 +349,7 @@ body {
   font-family: var(--mono);
 }
 .filter-chip:hover { border-color: var(--text2); color: var(--text); }
-.filter-chip.active { background: rgba(88,166,255,.12); border-color: var(--accent); color: var(--accent); }
+.filter-chip.active { background: rgba(142,162,155,.14); border-color: var(--accent); color: var(--accent); }
 .filter-label { font-size: 11px; color: var(--text3); margin-right: 2px; }
 
 /* ── Routes table ── */
@@ -392,7 +392,7 @@ body {
 }
 /* Row flash on update */
 @keyframes rowFlash {
-  0%   { background: rgba(210,153,34,.18); }
+  0%   { background: rgba(183,160,109,.18); }
   100% { background: transparent; }
 }
 .row-flash td { animation: rowFlash .8s ease-out; }
@@ -411,8 +411,8 @@ body {
   font-size: 10px;
   font-weight: 700;
 }
-.afi-badge.ipv4 { background: rgba(88,166,255,.15); color: var(--accent); }
-.afi-badge.ipv6 { background: rgba(188,140,255,.15); color: var(--purple); }
+.afi-badge.ipv4 { background: rgba(142,162,155,.16); color: var(--accent); }
+.afi-badge.ipv6 { background: rgba(169,156,175,.16); color: var(--purple); }
 
 .match-cell { font-family: var(--mono); font-size: 11px; }
 .match-inner { overflow: hidden; max-height: 5.4em; position: relative; } /* ponytail: 3 items * 1.8 line-height */
@@ -438,11 +438,11 @@ body {
   margin: 2px 2px 2px 0;
   white-space: nowrap;
 }
-.action-discard     { background: rgba(248,81,73,.15);  color: var(--red);    }
-.action-rate-limit  { background: rgba(227,179,65,.15); color: var(--orange); }
-.action-redirect    { background: rgba(63,185,80,.15);  color: var(--green);  }
-.action-mark        { background: rgba(188,140,255,.15);color: var(--purple); }
-.action-unknown-ec  { background: rgba(210,153,34,.2);  color: var(--yellow); border: 1px solid rgba(210,153,34,.4); }
+.action-discard     { background: rgba(181,141,135,.16); color: var(--red);    }
+.action-rate-limit  { background: rgba(183,160,109,.16); color: var(--yellow); }
+.action-redirect    { background: rgba(140,160,138,.16); color: var(--green);  }
+.action-mark        { background: rgba(169,156,175,.16); color: var(--purple); }
+.action-unknown-ec  { background: rgba(183,160,109,.2);  color: var(--yellow); border: 1px solid rgba(183,160,109,.34); }
 .action-other       { background: var(--bg3);           color: var(--text2);  }
 
 .ts-cell {
@@ -506,11 +506,11 @@ body {
   flex-shrink: 0;
   text-transform: uppercase;
 }
-.badge-session  { background: rgba(63,185,80,.15);  color: var(--green);  }
-.badge-announce { background: rgba(88,166,255,.15); color: var(--accent); }
-.badge-withdraw { background: rgba(227,179,65,.15); color: var(--orange); }
-.badge-error    { background: rgba(248,81,73,.15);  color: var(--red);    }
-.badge-warning  { background: rgba(210,153,34,.15); color: var(--yellow); }
+.badge-session  { background: rgba(140,160,138,.16); color: var(--green);  }
+.badge-announce { background: rgba(142,162,155,.16); color: var(--accent); }
+.badge-withdraw { background: rgba(192,154,127,.16); color: var(--orange); }
+.badge-error    { background: rgba(181,141,135,.16); color: var(--red);    }
+.badge-warning  { background: rgba(183,160,109,.16); color: var(--yellow); }
 
 .log-msg { color: var(--text); flex: 1; word-break: break-all; }
 .log-detail {
