@@ -670,6 +670,21 @@ body {
   background: var(--accent);
 }
 .analytics-bar-count { color: var(--text3); }
+
+@media (max-width: 760px) {
+  body { overflow: auto; }
+  .header { height: auto; min-height: 48px; padding: 8px 12px; flex-wrap: wrap; gap: 8px; }
+  .body { display: block; overflow: visible; }
+  .sidebar { width: 100%; max-height: none; border-right: 0; border-bottom: 1px solid var(--border); }
+  .sidebar.collapsed { display: none; }
+  .main { min-height: 60vh; }
+  .tab-bar { overflow-x: auto; padding-right: 4px; }
+  .tab-btn { padding: 0 10px; white-space: nowrap; }
+  .tab-spacer { display: none; }
+  .icon-btn { white-space: nowrap; }
+  .analytics-grid { grid-template-columns: 1fr; padding: 12px; }
+  .log-detail { margin-left: 16px; }
+}
 </style>
 </head>
 <body>
@@ -712,35 +727,32 @@ body {
         <label>Peer ASN</label>
         <input id="f-peer-as" type="number" placeholder="65000" min="1" max="4294967295">
       </div>
-      <div class="field">
-        <label>Hold Time (s)</label>
-        <input id="f-hold-time" type="number" value="90" min="3" max="65535">
-      </div>
-      <div class="field">
-        <label>Reconnect Delay (s)</label>
-        <input id="f-reconnect" type="number" value="5" min="0">
-      </div>
-      <div class="field">
-        <label>Connect Timeout (s)</label>
-        <input id="f-connect-timeout" type="number" value="5" min="1" step="0.5">
-      </div>
-      <div class="field">
-        <label>Active Retry (s)</label>
-        <input id="f-active-retry" type="number" value="1" min="0.1" step="0.1">
-      </div>
-      <div class="field">
-        <label>Listen Port
-          <span style="font-size:10px;color:var(--text3);font-weight:normal">
-            (auto: active + passive)
-          </span>
-        </label>
-        <input id="f-listen-port" type="number" value="179" min="1" max="65535">
-        <div style="font-size:11px;color:var(--text2);margin-top:4px;line-height:1.5">
-          bgpx connects out <em>and</em> listens simultaneously.<br>
-          Port 179 needs root or
-          <code style="color:var(--accent)">setcap cap_net_bind_service+ep</code>
+      <details style="margin-bottom:10px">
+        <summary style="cursor:pointer;color:var(--text2);font-size:11px">Advanced session settings</summary>
+        <div class="field" style="margin-top:10px">
+          <label>Hold Time (s)</label>
+          <input id="f-hold-time" type="number" value="90" min="3" max="65535">
         </div>
-      </div>
+        <div class="field">
+          <label>Reconnect Delay (s)</label>
+          <input id="f-reconnect" type="number" value="5" min="0">
+        </div>
+        <div class="field">
+          <label>Connect Timeout (s)</label>
+          <input id="f-connect-timeout" type="number" value="5" min="1" step="0.5">
+        </div>
+        <div class="field">
+          <label>Active Retry (s)</label>
+          <input id="f-active-retry" type="number" value="1" min="0.1" step="0.1">
+        </div>
+        <div class="field">
+          <label>Listen Port (auto: active + passive)</label>
+          <input id="f-listen-port" type="number" value="179" min="1" max="65535">
+          <div style="font-size:11px;color:var(--text2);margin-top:4px;line-height:1.5">
+            Port 179 needs root or <code style="color:var(--accent)">setcap cap_net_bind_service+ep</code>
+          </div>
+        </div>
+      </details>
 
       <button class="btn btn-start" id="start-btn" onclick="startSession()">
         ▶ Start Session
@@ -753,11 +765,7 @@ body {
     <div class="sidebar-section">
       <h3>RIB Summary</h3>
       <div class="stat-row">
-        <span>Total routes</span>
-        <span class="stat-val" id="s-total">0</span>
-      </div>
-      <div class="stat-row">
-        <span>Unicast</span>
+        <span>Routes</span>
         <span class="stat-val" id="s-unicast">0</span>
       </div>
     </div>
@@ -780,11 +788,8 @@ body {
     <!-- Tab bar -->
     <div class="tab-bar">
       <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">‹</button>
-      <button class="tab-btn active" id="tab-total-btn" onclick="switchTab('total')">
-        Total <span class="tab-count" id="total-count">0</span>
-      </button>
-      <button class="tab-btn" id="tab-unicast-btn" onclick="switchTab('unicast')">
-        Unicast <span class="tab-count" id="unicast-count">0</span>
+      <button class="tab-btn active" id="tab-unicast-btn" onclick="switchTab('unicast')">
+        Routes <span class="tab-count" id="unicast-count">0</span>
       </button>
       <button class="tab-btn" id="tab-analytics-btn" onclick="switchTab('analytics')">
         Route Analysis
@@ -821,19 +826,16 @@ body {
     <!-- Route analysis tab -->
     <div class="tab-content" id="tab-analytics">
       <div class="analytics-grid">
-        <div class="analytics-card"><h3>Total routes</h3><div class="analytics-value" id="a-total">0</div></div>
-        <div class="analytics-card"><h3>Unicast</h3><div class="analytics-value" id="a-unicast">0</div></div>
+        <div class="analytics-card"><h3>Routes</h3><div class="analytics-value" id="a-unicast">0</div></div>
         <div class="analytics-card"><h3>IPv4 / IPv6</h3><div class="analytics-list" id="a-afi">IPv4 0<br>IPv6 0</div></div>
-        <div class="analytics-card"><h3>Updates</h3><div class="analytics-list" id="a-events">Announce 0<br>Withdraw 0</div></div>
-        <div class="analytics-card"><h3>Churn · 1 min</h3><div class="analytics-list" id="a-churn-1m">A 0 · W 0</div></div>
-        <div class="analytics-card"><h3>Churn · 5 min</h3><div class="analytics-list" id="a-churn-5m">A 0 · W 0</div></div>
-        <div class="analytics-card"><h3>Churn · 60 min</h3><div class="analytics-list" id="a-churn-60m">A 0 · W 0</div></div>
+        <div class="analytics-card"><h3>Route churn</h3><div class="analytics-list" id="a-churn">1m A 0 · W 0<br>5m A 0 · W 0<br>60m A 0 · W 0</div></div>
+        <div class="analytics-card"><h3>AS path loops</h3><div class="analytics-value" id="a-as-loops">0</div></div>
+        <div class="analytics-card"><h3>Live updates</h3><div class="analytics-list" id="a-events">Announce 0<br>Withdraw 0</div></div>
         <div class="analytics-card"><h3>Top communities</h3><div class="analytics-list" id="a-communities">—</div></div>
         <div class="analytics-card"><h3>Origin AS</h3><div class="analytics-list" id="a-origin-as">—</div></div>
         <div class="analytics-card"><h3>Top next hops</h3><div class="analytics-list" id="a-next-hops">—</div></div>
         <div class="analytics-card"><h3>Prefix lengths</h3><div class="analytics-list" id="a-prefix-lengths">—</div></div>
         <div class="analytics-card"><h3>AS path lengths</h3><div class="analytics-list" id="a-path-lengths">—</div></div>
-        <div class="analytics-card"><h3>AS path loops</h3><div class="analytics-value" id="a-as-loops">0</div></div>
       </div>
     </div>
 
@@ -896,7 +898,6 @@ let autoScroll      = true;
 let logFilter       = 'all';
 let evtSource       = null;
 let sidebarOpen     = true;
-let currentView     = 'total';
 let announceCount   = 0;
 let withdrawCount   = 0;
 
@@ -937,8 +938,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (['total', 'unicast'].includes(name)) {
-    currentView = name;
+  if (name === 'unicast') {
     currentPage = 1;
     document.getElementById('tab-routes').classList.add('active');
     loadRoutes();
@@ -1110,9 +1110,7 @@ function updateFormState() {
 
 // ── RIB stats ──────────────────────────────────────────────────────────────
 function updateRibStats() {
-  setStat('s-total', ribStats.total || 0);
   setStat('s-unicast', ribStats.unicast || 0);
-  document.getElementById('total-count').textContent = ribStats.total || 0;
   document.getElementById('unicast-count').textContent = ribStats.unicast || 0;
   renderAnalytics();
 }
@@ -1126,14 +1124,13 @@ function setStat(id, val) {
 function renderAnalytics() {
   const a = ribStats.analytics || {};
   const churn = ribStats.churn || {};
-  document.getElementById('a-total').textContent = ribStats.total || 0;
   document.getElementById('a-unicast').textContent = ribStats.unicast || 0;
   document.getElementById('a-afi').innerHTML = `IPv4 ${ribStats.ipv4 || 0}<br>IPv6 ${ribStats.ipv6 || 0}`;
   document.getElementById('a-events').innerHTML = `Announce ${announceCount}<br>Withdraw ${withdrawCount}`;
-  ['1m', '5m', '60m'].forEach(window => {
+  document.getElementById('a-churn').innerHTML = ['1m', '5m', '60m'].map(window => {
     const c = churn[window] || {};
-    document.getElementById('a-churn-' + window).textContent = `A ${c.announce || 0} · W ${c.withdraw || 0}`;
-  });
+    return `${window} A ${c.announce || 0} · W ${c.withdraw || 0}`;
+  }).join('<br>');
   document.getElementById('a-communities').innerHTML = renderCountBars(a.communities);
   document.getElementById('a-origin-as').innerHTML = renderCountBars(a.origin_as, 'AS');
   document.getElementById('a-next-hops').innerHTML = renderCountBars(a.next_hops);
@@ -1199,7 +1196,7 @@ function renderRoutes(flashId) {
   renderRouteHeader();
 
   if (!routes.length) {
-    tbody.innerHTML = `<tr class="empty"><td colspan="${routeColumnCount()}">No ${currentView === 'total' ? '' : currentView + ' '}routes in RIB</td></tr>`;
+    tbody.innerHTML = `<tr class="empty"><td colspan="${routeColumnCount()}">No routes in RIB</td></tr>`;
     document.getElementById('page-info').textContent = 'No routes';
     document.getElementById('btn-prev-page').disabled = true;
     document.getElementById('btn-next-page').disabled = true;
@@ -1262,21 +1259,11 @@ function sortableHeader(label, col) {
 }
 
 function renderRouteHeader() {
-  let columns;
-  if (currentView === 'unicast') {
-    columns = [
-      sortableHeader('AFI', 'afi'), sortableHeader('Prefix', 'prefix'),
-      '<th>Community</th>', '<th>AS Path</th>',
-      sortableHeader('Next Hop', 'next_hop'), sortableHeader('Peer', 'peer'),
-      sortableHeader('Received', 'received_at'),
-    ];
-  } else {
-    columns = [
-      sortableHeader('AFI', 'afi'), sortableHeader('Prefix', 'prefix'),
-      '<th>Community</th>', '<th>AS Path</th>', sortableHeader('Next Hop', 'next_hop'),
-      sortableHeader('Peer', 'peer'), sortableHeader('Received', 'received_at'),
-    ];
-  }
+  const columns = [
+    sortableHeader('AFI', 'afi'), sortableHeader('Prefix', 'prefix'),
+    '<th>Community</th>', '<th>AS Path</th>', sortableHeader('Next Hop', 'next_hop'),
+    sortableHeader('Peer', 'peer'), sortableHeader('Received', 'received_at'),
+  ];
   document.getElementById('routes-head').innerHTML = `<tr>${columns.join('')}</tr>`;
 }
 
@@ -1289,16 +1276,6 @@ function renderRouteRow(r, flashId) {
   const end = '</tr>';
   const received = `<td class="ts-cell" title="${escHtml(formatServerTime(r.received_at))}">${absLocalTime(r.received_at)}</td>`;
 
-  if (currentView === 'unicast') {
-    return start +
-      `<td>${afiBadge(r.afi)}</td>` +
-      `<td>${escHtml(r.prefix || '')}</td>` +
-      `<td>${renderCommunities(r.communities || [])}</td>` +
-      `<td>${escHtml((r.as_path || []).join(' ') || '—')}</td>` +
-      `<td>${escHtml(r.next_hop || '—')}</td>` +
-      `<td class="id-cell">${escHtml(r.peer || '')}</td>` +
-      received + end;
-  }
   return start +
     `<td>${afiBadge(r.afi)}</td>` +
     `<td>${escHtml(r.prefix || '')}</td>` +
