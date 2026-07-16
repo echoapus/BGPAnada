@@ -9,7 +9,7 @@ CREATE_SERVICE=""
 SET_BIND_CAP=0
 SERVICE_NAME="${APP_NAME}.service"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
-USE_RUST=""
+USE_RUST=1
 
 usage() {
   cat <<'EOF'
@@ -23,7 +23,6 @@ Options:
   --web-port PORT           Web UI bind port (default prompt: 8080)
   --service                 Install and enable a systemd service
   --cap-net-bind-service    Allow the venv Python to bind privileged ports like 179
-  --rust                    Compile and use the Rust-optimized parser
   -h, --help                Show this help
 
 Environment:
@@ -96,10 +95,6 @@ while [[ $# -gt 0 ]]; do
       SET_BIND_CAP=1
       shift
       ;;
-    --rust)
-      USE_RUST=1
-      shift
-      ;;
     -h|--help)
       usage
       exit 0
@@ -141,17 +136,6 @@ if [[ "${CREATE_SERVICE}" -eq 1 ]] && ! command -v systemctl >/dev/null 2>&1; th
   echo "--service requires systemctl" >&2
   exit 1
 fi
-
-prompt_rust() {
-  [[ -n "${USE_RUST}" ]] && return
-  if [[ -t 0 ]]; then
-    read -r -p "Use Rust-optimized parser? [y/N]: " ans
-    [[ "${ans}" =~ ^[Yy] ]] && USE_RUST=1 || USE_RUST=0
-  else
-    USE_RUST=0
-  fi
-}
-prompt_rust
 
 SRC_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RUST_BUILD_DIR=""
@@ -221,7 +205,7 @@ tar \
 "${VENV_DIR}/bin/python" -m pip install --upgrade pip
 "${VENV_DIR}/bin/python" -m pip install "${APP_DIR}"
 
-# Remove any previous bgpx_rust wheel before verifying the selected engine.
+# Replace any previous bgpx_rust wheel with the required parser extension.
 "${VENV_DIR}/bin/python" -m pip uninstall -y bgpx_rust 2>/dev/null || true
 
 if [[ "${USE_RUST}" -eq 1 ]]; then
@@ -235,7 +219,7 @@ if [[ "${USE_RUST}" -eq 1 ]]; then
   echo "Installed Rust parser extension (PyO3 wheel)"
 fi
 
-"${VENV_DIR}/bin/python" -I - "${USE_RUST}" <<'PY'
+"${VENV_DIR}/bin/python" -I - <<'PY'
 from importlib import resources
 import sys
 
@@ -249,11 +233,9 @@ print("Verified installed package data: bgpx/web/ui.html")
 
 from bgpx.message import parser
 
-expected_rust = sys.argv[1] == "1"
-if (parser._rust is not None) != expected_rust:
-    raise SystemExit("Installed parser engine does not match deployment selection")
-engine = "Rust (PyO3 native)" if expected_rust else "Python"
-print(f"Verified installed parser engine: {engine}")
+if not hasattr(parser._rust, "parse_header"):
+    raise SystemExit("Installed Rust parser extension is unavailable")
+print("Verified installed parser engine: Rust (PyO3 native)")
 PY
 
 if [[ "${EUID}" -eq 0 ]]; then

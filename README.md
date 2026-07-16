@@ -4,7 +4,7 @@ BGP IPv4/IPv6 Unicast receiver with a live web UI — version 26.181.
 Connects to a peer router, maintains an in-memory RIB, and streams everything to the browser via Server-Sent Events.
 
 ```bash
-pip install bgpx
+sudo ./deploy.sh
 bgpx --local-as 65001 --router-id 192.0.2.2 --peer-ip 192.0.2.1 --peer-as 65000
 # open http://localhost:8080
 ```
@@ -27,8 +27,8 @@ bgpx --local-as 65001 --router-id 192.0.2.2 --peer-ip 192.0.2.1 --peer-as 65000
 ## Quick start
 
 ```bash
-# Web UI only — configure the session in the browser
-bgpx
+# Build and install the required Rust parser, then configure in the browser
+sudo ./deploy.sh
 
 # Auto-start a session
 bgpx --local-as 65001 --router-id 10.0.0.1 \
@@ -114,7 +114,7 @@ bgpx/
 ├── capture.py      tcpdump subprocess wrapper
 ├── api.py          aiohttp routes, SSE, health endpoint
 ├── message/
-│   ├── parser.py   BGP message parser (+ optional Rust PyO3 fast path)
+│   ├── parser.py   required Rust PyO3 parser bindings
 │   ├── builder.py  OPEN / KEEPALIVE / NOTIFICATION builders
 └── web/ui.html     single-file vanilla JS web UI
 ```
@@ -124,9 +124,7 @@ bgpx/
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-pytest                  # 68 tests, pure Python
-./test.sh               # Python + Rust PyO3 matrix (requires Cargo + maturin)
+./test.sh               # builds Rust PyO3, then runs all checks
 ```
 
 ---

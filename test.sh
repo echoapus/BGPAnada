@@ -10,9 +10,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "== Python fallback =="
-python3 -m pytest -q
-
 echo "== Python syntax =="
 PYTHONPYCACHEPREFIX="${TMP}/pycache" \
   python3 -m py_compile "${ROOT}"/bgpx/*.py "${ROOT}"/bgpx/message/*.py

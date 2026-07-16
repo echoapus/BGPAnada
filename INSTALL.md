@@ -21,25 +21,13 @@
   # macOS
   brew install tcpdump
   ```
-- **Rust, Cargo, and maturin** — required only for `deploy.sh --rust` and the
-  full `test.sh` matrix
+- **Rust, Cargo, and maturin** — required for deployment and `test.sh`
 
 ---
 
 ## Installation Methods
 
-### Method 1: Install from PyPI (recommended)
-
-```bash
-pip install bgpx
-```
-
-Verify installation:
-```bash
-bgpx --help
-```
-
-### Method 2: Install from Source
+### Method 1: Install from Source
 
 Clone the repository:
 ```bash
@@ -47,17 +35,7 @@ git clone <repo-url>
 cd BGPAnada
 ```
 
-Install in editable mode:
-```bash
-pip install -e .
-```
-
-Verify installation:
-```bash
-bgpx --help
-```
-
-### Method 3: Deploy to /opt
+### Method 2: Deploy to /opt
 
 The source tree includes `deploy.sh` for host installs. By default it installs the application under `/opt/bgpx`, creates a virtual environment at `/opt/bgpx/venv`, copies the source to `/opt/bgpx/app`, and links `bgpx` into `/usr/local/bin` when run as root.
 
@@ -68,18 +46,8 @@ sudo ./deploy.sh
 
 The script asks which Web UI port to bind. Press Enter to use `8080`.
 
-After `pip install`, the script verifies that the installed package can load `bgpx/web/ui.html`. If package data is missing, deployment stops immediately instead of leaving a service that returns HTTP 500 for the Web UI.
-
-Install the Rust parser and verify that Python loads the compiled PyO3
-extension:
-
-```bash
-sudo ./deploy.sh --rust
-```
-
-Re-running deployment without `--rust` removes any previously installed
-`bgpx_rust` wheel and verifies that the Python parser is active. Re-running
-with `--rust` reinstalls the optional wheel.
+The script builds and installs the required Rust parser extension, then verifies
+that the installed package can load the web UI and parser.
 
 Noninteractive install:
 ```bash
@@ -106,7 +74,7 @@ sudo ./deploy.sh --cap-net-bind-service
 
 Common combined production install:
 ```bash
-sudo ./deploy.sh --rust --service --cap-net-bind-service --web-port 8080
+sudo ./deploy.sh --service --cap-net-bind-service --web-port 8080
 ```
 
 For safety, `deploy.sh` refuses broad install targets such as `/`, `/opt`,
@@ -152,8 +120,7 @@ docker run --rm -p 179:179 -p 8080:8080 bgpx
 
 The image runs as root by default. If you change it to a non-root user, add
 `--cap-add=NET_BIND_SERVICE` or use a non-privileged passive listen port.
-The provided Dockerfile installs the Python parser. Use host deployment with
-`deploy.sh --rust` when the Rust PyO3 parser is required.
+The provided Dockerfile builds and installs the required Rust PyO3 parser.
 
 ---
 
@@ -198,19 +165,8 @@ outbound connections still use TCP port 179.
 
 ## Development Setup
 
-Install with development dependencies:
-
-```bash
-pip install -e ".[dev]"
-```
-
-Run tests:
-```bash
-pytest
-```
-
-Run Python fallback, shell/JavaScript checks, Rust fmt/Clippy/unit tests, and
-the release Rust PyO3 extension through Python:
+Run shell/JavaScript checks, Rust fmt/Clippy/unit tests, and the release Rust
+PyO3 extension through Python:
 
 ```bash
 ./test.sh
@@ -319,20 +275,10 @@ sudo kill -9 <PID>
 # Or set a different passive Listen Port in the Web UI
 ```
 
-### Issue: installed parser engine does not match deployment selection
+### Issue: Rust parser extension is unavailable
 
-Re-run the current `deploy.sh`. With `--rust`, it builds and installs the
-optional `bgpx_rust` wheel, then verifies imports in Python isolated mode:
-
-```bash
-sudo ./deploy.sh --rust
-```
-
-To switch back to Python and remove the optional `bgpx_rust` wheel:
-
-```bash
-sudo ./deploy.sh
-```
+Re-run the current `deploy.sh`; Rust is required and the script rebuilds the
+extension before starting the service.
 
 ## Docker Advanced Usage
 
