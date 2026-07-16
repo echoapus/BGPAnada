@@ -3,9 +3,10 @@
 import hashlib
 import json
 import logging
-from collections import Counter
+from collections import Counter, deque
 from datetime import datetime, timezone
 from itertools import islice
+from time import monotonic
 
 log = logging.getLogger(__name__)
 
@@ -29,8 +30,10 @@ class UnicastRIB:
             name: Counter()
             for name in (
                 "communities", "origin_as", "next_hops", "prefix_lengths",
+                "path_lengths", "as_loops",
             )
         }
+        self._churn: deque[tuple[int, Counter]] = deque(maxlen=60)
         self._changes = 0
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -64,6 +67,7 @@ class UnicastRIB:
             self._remove_stats(old)
         self._routes[route_id] = entry
         self._add_stats(entry)
+        self._record_churn("announce")
         log.debug("RIB %s [%s] id=%s peer=%s prefix=%s",
                   "UPDATE" if old else "ADD", afi, route_id, peer, prefix)
         self._changed()
@@ -118,6 +122,7 @@ class UnicastRIB:
             "unicast": self._counts["unicast"],
             "ipv4": self._counts["ipv4"],
             "ipv6": self._counts["ipv6"],
+            "churn": self._churn_stats(),
             "analytics": {
                 name: values.most_common(5)
                 for name, values in self._analytics.items()
@@ -172,6 +177,7 @@ class UnicastRIB:
         if not removed:
             return None
         self._remove_stats(removed)
+        self._record_churn("withdraw")
         log.debug("RIB DEL id=%s", route_id)
         self._changed()
         return route_id
@@ -180,6 +186,24 @@ class UnicastRIB:
         self._changes += 1
         if self._changes % 10_000 == 0:
             log.info("RIB contains %s routes", f"{len(self._routes):,}")
+
+    def _record_churn(self, kind: str) -> None:
+        minute = int(monotonic() // 60)
+        if not self._churn or self._churn[-1][0] != minute:
+            self._churn.append((minute, Counter()))
+        self._churn[-1][1][kind] += 1
+
+    def _churn_stats(self) -> dict[str, dict[str, int]]:
+        minute = int(monotonic() // 60)
+        while self._churn and self._churn[0][0] < minute - 59:
+            self._churn.popleft()
+        return {
+            f"{window}m": {
+                kind: sum(bucket[kind] for stamp, bucket in self._churn if stamp >= minute - window + 1)
+                for kind in ("announce", "withdraw")
+            }
+            for window in (1, 5, 60)
+        }
 
     def _add_stats(self, route: dict) -> None:
         self._counts["unicast"] += 1
@@ -203,6 +227,9 @@ class UnicastRIB:
         path = route.get("as_path", [])
         if path:
             metrics["origin_as"] = [str(path[-1])]
+            metrics["path_lengths"] = [str(len(path))]
+            if len(set(path)) < len(path):
+                metrics["as_loops"] = ["detected"]
         if route.get("next_hop"):
             metrics["next_hops"] = [route["next_hop"]]
         prefix_length = str(route.get("prefix", "")).partition("/")[2]

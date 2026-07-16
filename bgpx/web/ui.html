@@ -787,7 +787,7 @@ body {
         Unicast <span class="tab-count" id="unicast-count">0</span>
       </button>
       <button class="tab-btn" id="tab-analytics-btn" onclick="switchTab('analytics')">
-        Analytics
+        Route Analysis
       </button>
       <button class="tab-btn" id="tab-log-btn" onclick="switchTab('log')">
         Live Log <span class="tab-count" id="log-count">0</span>
@@ -818,17 +818,22 @@ body {
       </div>
     </div>
 
-    <!-- Analytics tab -->
+    <!-- Route analysis tab -->
     <div class="tab-content" id="tab-analytics">
       <div class="analytics-grid">
         <div class="analytics-card"><h3>Total routes</h3><div class="analytics-value" id="a-total">0</div></div>
         <div class="analytics-card"><h3>Unicast</h3><div class="analytics-value" id="a-unicast">0</div></div>
         <div class="analytics-card"><h3>IPv4 / IPv6</h3><div class="analytics-list" id="a-afi">IPv4 0<br>IPv6 0</div></div>
         <div class="analytics-card"><h3>Updates</h3><div class="analytics-list" id="a-events">Announce 0<br>Withdraw 0</div></div>
+        <div class="analytics-card"><h3>Churn · 1 min</h3><div class="analytics-list" id="a-churn-1m">A 0 · W 0</div></div>
+        <div class="analytics-card"><h3>Churn · 5 min</h3><div class="analytics-list" id="a-churn-5m">A 0 · W 0</div></div>
+        <div class="analytics-card"><h3>Churn · 60 min</h3><div class="analytics-list" id="a-churn-60m">A 0 · W 0</div></div>
         <div class="analytics-card"><h3>Top communities</h3><div class="analytics-list" id="a-communities">—</div></div>
         <div class="analytics-card"><h3>Origin AS</h3><div class="analytics-list" id="a-origin-as">—</div></div>
         <div class="analytics-card"><h3>Top next hops</h3><div class="analytics-list" id="a-next-hops">—</div></div>
         <div class="analytics-card"><h3>Prefix lengths</h3><div class="analytics-list" id="a-prefix-lengths">—</div></div>
+        <div class="analytics-card"><h3>AS path lengths</h3><div class="analytics-list" id="a-path-lengths">—</div></div>
+        <div class="analytics-card"><h3>AS path loops</h3><div class="analytics-value" id="a-as-loops">0</div></div>
       </div>
     </div>
 
@@ -1120,14 +1125,21 @@ function setStat(id, val) {
 
 function renderAnalytics() {
   const a = ribStats.analytics || {};
+  const churn = ribStats.churn || {};
   document.getElementById('a-total').textContent = ribStats.total || 0;
   document.getElementById('a-unicast').textContent = ribStats.unicast || 0;
   document.getElementById('a-afi').innerHTML = `IPv4 ${ribStats.ipv4 || 0}<br>IPv6 ${ribStats.ipv6 || 0}`;
   document.getElementById('a-events').innerHTML = `Announce ${announceCount}<br>Withdraw ${withdrawCount}`;
+  ['1m', '5m', '60m'].forEach(window => {
+    const c = churn[window] || {};
+    document.getElementById('a-churn-' + window).textContent = `A ${c.announce || 0} · W ${c.withdraw || 0}`;
+  });
   document.getElementById('a-communities').innerHTML = renderCountBars(a.communities);
   document.getElementById('a-origin-as').innerHTML = renderCountBars(a.origin_as, 'AS');
   document.getElementById('a-next-hops').innerHTML = renderCountBars(a.next_hops);
   document.getElementById('a-prefix-lengths').innerHTML = renderCountBars(a.prefix_lengths);
+  document.getElementById('a-path-lengths').innerHTML = renderCountBars(a.path_lengths);
+  document.getElementById('a-as-loops').textContent = a.as_loops?.[0]?.[1] || 0;
 }
 
 function renderCountBars(rows=[], prefix='') {

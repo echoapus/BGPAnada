@@ -80,7 +80,7 @@ Open `http://localhost:8080`. Session config is saved to `localStorage`.
 |---|---|
 | Sidebar | Configure and start/stop the BGP session |
 | **Total / Unicast** tabs | Paginated, sortable route table |
-| **Analytics** tab | Family/AFI counts, top communities, origin AS, next-hops, prefix lengths |
+| **Route Analysis** tab | Churn、AS-path length/loop、family/AFI counts、top communities and next-hops |
 | **Live Log** tab | SSE event stream — filter by SESSION / ANNOUNCE / WITHDRAW / ERROR / PCAP; click to expand JSON |
 | **◉ Capture** | Start/stop `tcpdump` on BGP traffic (requires `tcpdump` on `$PATH`) |
 | **⬇ Export** | Download the current table view as JSON |
