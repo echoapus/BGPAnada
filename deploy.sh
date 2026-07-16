@@ -9,13 +9,12 @@ CREATE_SERVICE=""
 SET_BIND_CAP=0
 SERVICE_NAME="${APP_NAME}.service"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
-USE_RUST=1
 
 usage() {
   cat <<'EOF'
 Usage: ./deploy.sh [options]
 
-Install bgpx under /opt/bgpx by default.
+Install BGPAnada under /opt/bgpx by default.
 
 Options:
   --install-dir DIR          Install location (default: /opt/bgpx)
@@ -145,33 +144,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ "${USE_RUST}" -eq 1 ]]; then
-  if ! command -v cargo >/dev/null 2>&1; then
-    echo "Rust (cargo) not found."
-    if [[ -t 0 ]]; then
-      read -r -p "Install Rust automatically via rustup? [Y/n]: " ans
-      if [[ ! "${ans}" =~ ^[Nn] ]]; then
-        echo "Installing Rust..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        if [[ -f "$HOME/.cargo/env" ]]; then
-          source "$HOME/.cargo/env"
-        elif [[ -f "/root/.cargo/env" ]]; then
-          source "/root/.cargo/env"
-        fi
-      else
-        echo "Rust is required to compile. Exiting." >&2
-        exit 1
-      fi
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "Rust (cargo) not found."
+  if [[ -t 0 ]]; then
+    read -r -p "Install Rust automatically via rustup? [Y/n]: " ans
+    if [[ ! "${ans}" =~ ^[Nn] ]]; then
+      echo "Installing Rust..."
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      source "$HOME/.cargo/env"
     else
-      echo "Non-interactive shell and Rust not found. Exiting." >&2
+      echo "Rust is required to compile. Exiting." >&2
       exit 1
     fi
+  else
+    echo "Non-interactive shell and Rust not found. Exiting." >&2
+    exit 1
   fi
-
-  echo "Compiling Rust BGP parser extension (PyO3)..."
-  RUST_BUILD_DIR="$(mktemp -d)"
-  cp -a "${SRC_DIR}/bgpx_rust/." "${RUST_BUILD_DIR}/"
 fi
+
+echo "Compiling required Rust BGP parser extension (PyO3)..."
+RUST_BUILD_DIR="$(mktemp -d)"
+cp -a "${SRC_DIR}/bgpx_rust/." "${RUST_BUILD_DIR}/"
 
 VENV_DIR="${INSTALL_DIR}/venv"
 APP_DIR="${INSTALL_DIR}/app"
@@ -208,16 +201,14 @@ tar \
 # Replace any previous bgpx_rust wheel with the required parser extension.
 "${VENV_DIR}/bin/python" -m pip uninstall -y bgpx_rust 2>/dev/null || true
 
-if [[ "${USE_RUST}" -eq 1 ]]; then
-  "${VENV_DIR}/bin/python" -m pip install --quiet maturin
-  PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 "${VENV_DIR}/bin/python" -m maturin build --release \
-    --manifest-path "${RUST_BUILD_DIR}/Cargo.toml" \
-    --interpreter "${VENV_DIR}/bin/python" \
-    --out "${RUST_BUILD_DIR}/wheels"
-  "${VENV_DIR}/bin/python" -m pip install \
-    --no-index --find-links "${RUST_BUILD_DIR}/wheels" bgpx_rust
-  echo "Installed Rust parser extension (PyO3 wheel)"
-fi
+"${VENV_DIR}/bin/python" -m pip install --quiet maturin
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 "${VENV_DIR}/bin/python" -m maturin build --release \
+  --manifest-path "${RUST_BUILD_DIR}/Cargo.toml" \
+  --interpreter "${VENV_DIR}/bin/python" \
+  --out "${RUST_BUILD_DIR}/wheels"
+"${VENV_DIR}/bin/python" -m pip install \
+  --no-index --find-links "${RUST_BUILD_DIR}/wheels" bgpx_rust
+echo "Installed Rust parser extension (PyO3 wheel)"
 
 "${VENV_DIR}/bin/python" -I - <<'PY'
 from importlib import resources
@@ -291,11 +282,7 @@ echo "Virtualenv:        ${VENV_DIR}"
 echo "Executable:        ${VENV_DIR}/bin/bgpx"
 echo "Web UI bind:       0.0.0.0:${WEB_PORT}"
 echo "Web UI URL:        http://localhost:${WEB_PORT}"
-if [[ "${USE_RUST}" -eq 1 ]]; then
-  echo "Parser Engine:     Rust (PyO3 native extension)"
-else
-  echo "Parser Engine:     Pure Python"
-fi
+echo "Parser Engine:     Rust (PyO3 native extension)"
 if [[ "${EUID}" -eq 0 ]]; then
   echo "Command link:      ${BIN_LINK}"
 else

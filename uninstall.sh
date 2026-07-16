@@ -13,7 +13,7 @@ usage() {
   cat <<'EOF'
 Usage: ./uninstall.sh [options]
 
-Remove a bgpx installation created by deploy.sh.
+Remove a BGPAnada installation created by deploy.sh.
 
 Options:
   --install-dir DIR   Install location to remove (default: /opt/bgpx)
@@ -35,7 +35,7 @@ confirm() {
     echo "Refusing to uninstall without confirmation on noninteractive input. Use --force." >&2
     exit 1
   fi
-  read -r -p "Remove bgpx installation? Type 'yes' to continue: " answer
+  read -r -p "Remove BGPAnada installation? Type 'yes' to continue: " answer
   if [[ "${answer}" != "yes" ]]; then
     echo "Uninstall cancelled."
     exit 0
