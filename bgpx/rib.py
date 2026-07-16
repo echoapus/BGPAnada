@@ -1,10 +1,8 @@
-"""In-memory Unicast and FlowSpec RIB with optional JSON persistence."""
+"""In-memory Unicast and FlowSpec RIB."""
 
-import asyncio
 import hashlib
 import json
 import logging
-import os
 from collections import Counter
 from datetime import datetime, timezone
 from itertools import islice
@@ -26,10 +24,8 @@ def _route_id(family: str, afi: str, peer: str, route: dict) -> str:
 
 # ponytail: threading.Lock removed because bgpx is purely single-threaded asyncio
 class FlowspecRIB:
-    def __init__(self, json_output: str | None = None):
+    def __init__(self):
         self._routes: dict[str, dict] = {}
-        self._json_output = json_output
-        self._persist_handle: asyncio.TimerHandle | None = None
         self._counts = Counter()
         self._analytics = {
             name: Counter()
@@ -154,9 +150,6 @@ class FlowspecRIB:
             self._changed()
         return count
 
-    def set_json_output(self, path: str | None) -> None:
-        self._json_output = path
-
     def to_dict(self) -> dict:
         routes = [self._normalized_route(r) for r in self._routes.values()]
         return {"count": len(routes), "routes": routes}
@@ -223,12 +216,6 @@ class FlowspecRIB:
             if family == "total" or route["family"] == family:
                 yield self._normalized_route(route)
 
-    def flush(self) -> None:
-        if self._persist_handle:
-            self._persist_handle.cancel()
-            self._persist_handle = None
-        self._persist()
-
     # ── Internal ──────────────────────────────────────────────────────────────
 
     def _normalized_route(self, route: dict) -> dict:
@@ -250,17 +237,6 @@ class FlowspecRIB:
         self._changes += 1
         if self._changes % 10_000 == 0:
             log.info("RIB contains %s routes", f"{len(self._routes):,}")
-        if not self._json_output:
-            return
-        if self._persist_handle:
-            self._persist_handle.cancel()
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self._persist()
-            return
-        # ponytail: one full JSON write after a burst, not one per route
-        self._persist_handle = loop.call_later(5, self.flush)
 
     def _add_stats(self, route: dict) -> None:
         family = route["family"]
@@ -302,19 +278,3 @@ class FlowspecRIB:
                 + match.get("dst-port", [])
             )
         return metrics
-
-    def _persist(self):
-        if not self._json_output:
-            return
-        tmp = self._json_output + ".tmp"
-        try:
-            with open(tmp, "w") as f:
-                f.write(f'{{"count":{len(self._routes)},"routes":[')
-                for index, route in enumerate(self.iter_routes()):
-                    if index:
-                        f.write(",")
-                    json.dump(route, f, separators=(",", ":"))
-                f.write("]}")
-            os.replace(tmp, self._json_output)  # atomic rename
-        except OSError as e:
-            log.error(f"Failed to write {self._json_output}: {e}")

@@ -26,10 +26,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "  # Auto-start session + web UI\n"
             "  bgpx --local-as 65001 --router-id 192.0.2.2 \\\n"
             "       --peer-ip 192.0.2.1 --peer-as 65000\n\n"
-            "  # With JSON output and debug logging\n"
+            "  # With debug logging\n"
             "  bgpx --local-as 65001 --router-id 10.0.0.1 \\\n"
             "       --peer-ip 10.0.0.2 --peer-as 65000 \\\n"
-            "       --json-output /tmp/routes.json --log-level DEBUG\n"
+            "       --log-level DEBUG\n"
         ),
     )
 
@@ -46,9 +46,6 @@ def _build_parser() -> argparse.ArgumentParser:
     bgp.add_argument("--reconnect-delay", type=int, default=5, metavar="SECS")
     bgp.add_argument("--connect-timeout", type=float, default=5.0, metavar="SECS")
     bgp.add_argument("--active-retry-delay", type=float, default=1.0, metavar="SECS")
-    bgp.add_argument("--json-output", metavar="FILE",
-                     help="Write RIB to this JSON file on every change")
-
     web = p.add_argument_group("Web UI / REST API")
     web.add_argument("--host", default="0.0.0.0", metavar="ADDR",
                      help="Listen address (default: 0.0.0.0)")
@@ -65,7 +62,7 @@ async def _run(args: argparse.Namespace):
     from bgpx.api import create_app
 
     events  = EventBus()
-    rib     = FlowspecRIB(json_output=args.json_output)
+    rib     = FlowspecRIB()
     manager = SessionManager(events, rib)
     capture = PacketCapture(events)
 
@@ -80,7 +77,6 @@ async def _run(args: argparse.Namespace):
             reconnect_delay = args.reconnect_delay,
             connect_timeout = args.connect_timeout,
             active_retry_delay = args.active_retry_delay,
-            json_output     = args.json_output,
         )
         await manager.start(cfg)
 

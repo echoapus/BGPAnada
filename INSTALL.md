@@ -364,18 +364,6 @@ the `ec=...` prefix preserves the original community bytes.
 
 ## Docker Advanced Usage
 
-### Mount a volume for JSON output
-
-```bash
-docker run --rm -p 179:179 -p 8080:8080 \
-  -v /tmp/routes:/data \
-  bgpx \
-  --host 0.0.0.0 --port 8080 \
-  --local-as 65001 --router-id 10.0.0.1 \
-  --peer-ip 10.0.0.2 --peer-as 65000 \
-  --json-output /data/routes.json
-```
-
 ### Custom network
 
 ```bash
@@ -493,7 +481,7 @@ sudo ./uninstall.sh --install-dir /opt/custom-bgpx
 1. **Review Configuration** — see [README.md](README.md) for all flags and options
 2. **Test with a Peer** — connect to your BGP peer router
 3. **Monitor Routes** — use Total, Unicast, and FlowSpec tabs
-4. **Export RIB** — use `--json-output` to persist routes to a file
+4. **Export RIB** — use the web UI Export button to download routes as JSON
 5. **Set Up Monitoring** — integrate with your monitoring stack
 
 ---

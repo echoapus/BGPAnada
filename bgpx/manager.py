@@ -42,7 +42,6 @@ class SessionManager:
             connect_timeout=config.connect_timeout,
             active_retry_delay=config.active_retry_delay,
             listen_port=config.listen_port,
-            json_output=config.json_output,
         )
         log.info(f"Session started → {config.peer_ip} (auto-mode)")
 
@@ -57,7 +56,6 @@ class SessionManager:
                 pass
         self._session = None
         self._task    = None
-        self._rib.flush()
         self._events.emit("session", "info", "BGP session stopped", running=False)
         log.info("Session stopped")
 
@@ -86,6 +84,5 @@ class SessionManager:
             "connect_timeout": cfg.connect_timeout if cfg else 5.0,
             "active_retry_delay": cfg.active_retry_delay if cfg else 1.0,
             "listen_port": cfg.listen_port if cfg else 179,
-            "json_output": cfg.json_output if cfg else None,
             "peer_info":   self._session.peer_info if self._session else {},
         }

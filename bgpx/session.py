@@ -34,7 +34,6 @@ class SessionConfig:
     connect_timeout: float         = 5.0
     active_retry_delay: float      = 1.0
     listen_port:     int           = 179
-    json_output:     str | None = None
 
 
 @dataclass

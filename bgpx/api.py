@@ -67,12 +67,10 @@ async def _session_start(req: web.Request) -> web.Response:
             connect_timeout    = float(body.get("connect_timeout", 5.0)),
             active_retry_delay = float(body.get("active_retry_delay", 1.0)),
             listen_port        = int(body.get("listen_port", 179)),
-            json_output        = body.get("json_output") or None,
         )
     except (ValueError, TypeError) as e:
         return _err(f"Invalid config: {e}", 400)
 
-    req.app["rib"].set_json_output(config.json_output)
     await req.app["manager"].start(config)
     return web.json_response({"ok": True})
 

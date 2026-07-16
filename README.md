@@ -22,7 +22,6 @@ bgpx --local-as 65001 --router-id 192.0.2.2 --peer-ip 192.0.2.1 --peer-as 65000
 - **All standard FlowSpec actions** — rate-limit (bps/pps), discard, redirect-to-VRF, redirect-to-IP, DSCP mark, traffic-action
 - **4-byte ASN** — `AS_TRANS`, `CAP_4BYTE_ASN`, `AS4_PATH` (RFC 6793)
 - **Hold-timer enforcement** — session resets on expiry
-- **JSON RIB persistence** — debounced atomic writes to a file (`--json-output`)
 - **Web UI** — sortable route table, live log with filter chips, analytics, packet capture viewer
 
 ---
@@ -37,10 +36,10 @@ bgpx
 bgpx --local-as 65001 --router-id 10.0.0.1 \
      --peer-ip 10.0.0.2 --peer-as 65000
 
-# With JSON output and debug logging
+# With debug logging
 bgpx --local-as 65001 --router-id 10.0.0.1 \
      --peer-ip 10.0.0.2 --peer-as 65000 \
-     --json-output /tmp/routes.json --log-level DEBUG
+     --log-level DEBUG
 ```
 
 ### Docker
@@ -64,7 +63,6 @@ docker run --rm -p 179:179 -p 8080:8080 bgpx
 | `--reconnect-delay` | `5` | Seconds before reconnecting after a drop |
 | `--connect-timeout` | `5.0` | TCP connect timeout |
 | `--active-retry-delay` | `1.0` | Delay between active connect attempts |
-| `--json-output` | — | Write RIB to this file after each change burst |
 | `--host` | `0.0.0.0` | Web UI listen address |
 | `--port` | `8080` | Web UI listen port |
 | `--log-level` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
@@ -95,42 +93,6 @@ Header indicators:
 
 ---
 
-## JSON RIB format
-
-```json
-{
-  "count": 2,
-  "routes": [
-    {
-      "id": "98d8d25ae319",
-      "family": "unicast",
-      "afi": "ipv4-unicast",
-      "peer": "10.0.0.2",
-      "received_at": "2026-06-25T12:00:00+00:00",
-      "prefix": "192.0.2.0/24",
-      "next_hop": "10.0.0.2",
-      "as_path": [65000, 64496],
-      "communities": ["65000:100", "NO_EXPORT"],
-      "path_attributes": []
-    },
-    {
-      "id": "a3f1b2c4d5e6",
-      "family": "flowspec",
-      "afi": "ipv4-flowspec",
-      "peer": "10.0.0.2",
-      "received_at": "2026-06-04T12:00:00+00:00",
-      "match": {
-        "dst-prefix": "203.0.113.0/24",
-        "ip-proto": ["=tcp(6)"],
-        "dst-port": ["=80", "=443"]
-      },
-      "actions": ["discard"],
-      "path_attributes": []
-    }
-  ]
-}
-```
-
 `traffic-rate-bytes` is decoded per RFC 8955 as bytes/second and rendered as network bits/second — e.g. `0.1 Mbps` from the router appears as `rate-limit=100000bps`.
 
 ---
@@ -155,7 +117,7 @@ bgpx/
 ├── cli.py          entry point, component wiring
 ├── manager.py      session start / stop / restart
 ├── session.py      BGP FSM, UPDATE dispatch
-├── rib.py          unicast + FlowSpec RIB, stats, pagination, JSON persistence
+├── rib.py          unicast + FlowSpec RIB, stats, pagination
 ├── events.py       event history, SSE fan-out
 ├── capture.py      tcpdump subprocess wrapper
 ├── api.py          aiohttp routes, SSE, health endpoint

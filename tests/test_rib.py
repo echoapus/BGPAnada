@@ -1,8 +1,5 @@
 """Tests for Unicast and FlowSpec RIB behavior."""
 
-import asyncio
-import json
-
 from bgpx.rib import FlowspecRIB
 
 
@@ -99,18 +96,3 @@ def test_rib_page_and_stats_cover_full_rib():
     rib.remove_unicast("ipv4-unicast", "203.0.113.0/24", "192.0.2.1")
     assert rib.stats()["unicast"] == 2
     assert rib.stats()["analytics"]["communities"] == [("65000:100", 2)]
-
-
-def test_json_output_is_debounced_and_flushable(tmp_path):
-    async def run():
-        output = tmp_path / "routes.json"
-        rib = FlowspecRIB(str(output))
-        rib.add_unicast("ipv4-unicast", "203.0.113.0/24", "192.0.2.1")
-
-        assert not output.exists()
-        assert rib._persist_handle is not None
-
-        rib.flush()
-        assert json.loads(output.read_text())["count"] == 1
-
-    asyncio.run(run())

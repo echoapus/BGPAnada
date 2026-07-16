@@ -729,10 +729,6 @@ body {
         <input id="f-active-retry" type="number" value="1" min="0.1" step="0.1">
       </div>
       <div class="field">
-        <label>JSON Output File (optional)</label>
-        <input id="f-json-output" type="text" placeholder="/tmp/routes.json">
-      </div>
-      <div class="field">
         <label>Listen Port
           <span style="font-size:10px;color:var(--text3);font-weight:normal">
             (auto: active + passive)
@@ -1551,7 +1547,6 @@ function collectConfig() {
     reconnect_delay:    document.getElementById('f-reconnect').value.trim(),
     connect_timeout:    document.getElementById('f-connect-timeout').value.trim(),
     active_retry_delay: document.getElementById('f-active-retry').value.trim(),
-    json_output:        document.getElementById('f-json-output').value.trim(),
     listen_port:        document.getElementById('f-listen-port').value.trim(),
   };
 
@@ -1567,8 +1562,7 @@ function collectConfig() {
 
 function setFormDisabled(disabled) {
   ['f-local-as','f-router-id','f-peer-ip','f-peer-as',
-   'f-hold-time','f-reconnect','f-connect-timeout','f-active-retry',
-   'f-json-output','f-listen-port'].forEach(id => {
+   'f-hold-time','f-reconnect','f-connect-timeout','f-active-retry','f-listen-port'].forEach(id => {
     document.getElementById(id).disabled = disabled;
   });
 }
@@ -1576,7 +1570,7 @@ function setFormDisabled(disabled) {
 // ── localStorage config persistence ───────────────────────────────────────
 const _FORM_KEYS = ['f-local-as','f-router-id','f-peer-ip','f-peer-as',
                     'f-hold-time','f-reconnect','f-connect-timeout',
-                    'f-active-retry','f-json-output','f-listen-port'];
+                    'f-active-retry','f-listen-port'];
 
 function saveForm(config) {
   try { localStorage.setItem('bgpx-config', JSON.stringify(config)); } catch (_) {}
@@ -1596,7 +1590,7 @@ function populateForm(config) {
     'f-peer-ip':  'peer_ip',  'f-peer-as':   'peer_as',
     'f-hold-time':'hold_time','f-reconnect':  'reconnect_delay',
     'f-connect-timeout':'connect_timeout','f-active-retry':'active_retry_delay',
-    'f-json-output':'json_output','f-listen-port':'listen_port',
+    'f-listen-port':'listen_port',
   };
   Object.entries(map).forEach(([elId, key]) => {
     if (config[key] != null) document.getElementById(elId).value = config[key];
