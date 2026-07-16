@@ -31,6 +31,19 @@ Environment:
 EOF
 }
 
+show_welcome() {
+  [[ -t 0 ]] || return
+  cat <<'EOF'
+
+Welcome to BGPAnada
+
+This setup installs BGPAnada and prepares everything it needs to receive
+routes. You only need to choose a Web UI port and whether it should start
+automatically. BGP peer details are configured in the browser afterwards.
+
+EOF
+}
+
 is_valid_port() {
   [[ "$1" =~ ^[0-9]+$ ]] && [[ "$1" -ge 1 ]] && [[ "$1" -le 65535 ]]
 }
@@ -58,7 +71,7 @@ prompt_web_port() {
 
   if [[ -t 0 ]]; then
     while true; do
-      read -r -p "Web UI bind port [8080]: " value
+      read -r -p "Which port should the Web UI use? [8080]: " value
       value="${value:-8080}"
       if is_valid_port "${value}"; then
         WEB_PORT="${value}"
@@ -122,13 +135,14 @@ prompt_service() {
   # ponytail: prompt for service installation if running interactively as root and not explicitly set.
   [[ -n "${CREATE_SERVICE}" ]] && return
   if [[ "${EUID}" -eq 0 && -t 0 ]]; then
-    read -r -p "Install and enable systemd service? [y/N]: " ans
+    read -r -p "Start BGPAnada automatically after reboot? [y/N]: " ans
     [[ "${ans}" =~ ^[Yy] ]] && CREATE_SERVICE=1 || CREATE_SERVICE=0
   else
     CREATE_SERVICE=0
   fi
 }
 
+show_welcome
 prompt_web_port
 prompt_service
 if [[ "${CREATE_SERVICE}" -eq 1 ]] && ! command -v systemctl >/dev/null 2>&1; then
@@ -145,15 +159,15 @@ cleanup() {
 trap cleanup EXIT
 
 if ! command -v cargo >/dev/null 2>&1; then
-  echo "Rust (cargo) not found."
+  echo "A one-time setup component is needed to prepare BGPAnada."
   if [[ -t 0 ]]; then
-    read -r -p "Install Rust automatically via rustup? [Y/n]: " ans
+    read -r -p "Install it automatically now? [Y/n]: " ans
     if [[ ! "${ans}" =~ ^[Nn] ]]; then
       echo "Installing Rust..."
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       source "$HOME/.cargo/env"
     else
-      echo "Rust is required to compile. Exiting." >&2
+      echo "BGPAnada cannot be installed without this component. Exiting." >&2
       exit 1
     fi
   else
@@ -273,43 +287,25 @@ EOF
 fi
 
 echo
-echo "Install complete"
-echo "=============="
-echo "Application:       ${APP_NAME}"
-echo "Install directory: ${INSTALL_DIR}"
-echo "Source copy:       ${APP_DIR}"
-echo "Virtualenv:        ${VENV_DIR}"
-echo "Executable:        ${VENV_DIR}/bin/bgpx"
-echo "Web UI bind:       0.0.0.0:${WEB_PORT}"
-echo "Web UI URL:        http://localhost:${WEB_PORT}"
-echo "Parser Engine:     Rust (PyO3 native extension)"
-if [[ "${EUID}" -eq 0 ]]; then
-  echo "Command link:      ${BIN_LINK}"
-else
-  echo "Command link:      not created (run as root to link ${BIN_LINK})"
-fi
-if [[ "${SET_BIND_CAP}" -eq 1 ]]; then
-  echo "BGP port 179:      cap_net_bind_service granted to $(readlink -f "${VENV_DIR}/bin/python")"
-else
-  echo "BGP port 179:      run as root or redeploy with --cap-net-bind-service"
-fi
+echo "BGPAnada is ready"
+echo "================="
+echo
+echo "1. Open the Web UI:"
+echo "   http://localhost:${WEB_PORT}"
+echo "   http://<this-server-ip>:${WEB_PORT}  (from another computer)"
+echo
+echo "2. In the Web UI, enter your Local AS, Router ID, peer IP, and peer AS."
+echo "3. Click Start Session to begin receiving routes."
+echo
 if [[ "${CREATE_SERVICE}" -eq 1 ]]; then
-  echo "Systemd unit:      ${SERVICE_FILE}"
+  echo "BGPAnada will start automatically after reboot."
   echo
-  echo "Next commands:"
-  echo "  sudo systemctl status ${SERVICE_NAME}"
-  echo "  sudo journalctl -u ${SERVICE_NAME} -f"
-  echo
-  echo "Service status:"
-  systemctl --no-pager --full --lines=20 status "${SERVICE_NAME}" || true
+  echo "Check service status: sudo systemctl status ${SERVICE_NAME}"
 else
-  echo "Systemd unit:      not installed"
-  echo
-  echo "Start manually:"
-  echo "  ${VENV_DIR}/bin/bgpx --host 0.0.0.0 --port ${WEB_PORT}"
+  echo "To start it later: ${VENV_DIR}/bin/bgpx --host 0.0.0.0 --port ${WEB_PORT}"
 fi
 echo
-echo "Uninstall:"
+echo "Need to remove it?"
 if [[ -x "${SRC_DIR}/uninstall.sh" ]]; then
   echo "  sudo ${SRC_DIR}/uninstall.sh"
 else

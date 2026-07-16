@@ -39,15 +39,23 @@ cd BGPAnada
 
 The source tree includes `deploy.sh` for host installs. By default it installs the application under `/opt/bgpx`, creates a virtual environment at `/opt/bgpx/venv`, copies the source to `/opt/bgpx/app`, and links `bgpx` into `/usr/local/bin` when run as root.
 
-Interactive install:
+For a first-time install, run:
 ```bash
 sudo ./deploy.sh
 ```
 
-The script asks which Web UI port to bind. Press Enter to use `8080`.
+The setup explains what it will do, then asks only:
 
-The script builds and installs the required Rust parser extension, then verifies
-that the installed package can load the web UI and parser.
+1. Which port the Web UI should use (press Enter for `8080`).
+2. Whether BGPAnada should start automatically after reboot.
+
+When it finishes, open the displayed URL in a browser. Enter your Local AS,
+Router ID, peer IP, and peer AS, then click **Start Session**. The installer
+prepares the required parser automatically; no Rust or virtualenv knowledge is
+needed for normal use.
+
+For a server accessed remotely, replace `localhost` in the displayed URL with
+that server's IP address.
 
 Noninteractive install:
 ```bash
@@ -101,7 +109,7 @@ Uninstall without an interactive prompt:
 sudo ./uninstall.sh --force
 ```
 
-### Method 4: Docker
+### Method 3: Docker
 
 Build the image:
 ```bash
