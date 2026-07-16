@@ -7,7 +7,7 @@ import logging
 from bgpx.capture import PacketCapture
 from bgpx.events import EventBus
 from bgpx.manager import SessionManager
-from bgpx.rib import FlowspecRIB
+from bgpx.rib import UnicastRIB
 from bgpx.session import SessionConfig
 
 
@@ -15,7 +15,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="bgpx",
         description=(
-            "BGP Unicast and FlowSpec Receiver — open http://localhost:8080 to configure\n"
+            "BGP Unicast Receiver — open http://localhost:8080 to configure\n"
             "and monitor, or pass BGP flags to auto-start the session."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -62,7 +62,7 @@ async def _run(args: argparse.Namespace):
     from bgpx.api import create_app
 
     events  = EventBus()
-    rib     = FlowspecRIB()
+    rib     = UnicastRIB()
     manager = SessionManager(events, rib)
     capture = PacketCapture(events)
 
@@ -88,7 +88,7 @@ async def _run(args: argparse.Namespace):
 
     log = logging.getLogger(__name__)
     log.info(f"Web UI  →  http://{args.host}:{args.port}")
-    log.info("Open your browser to configure and monitor BGP flowspec routes.")
+    log.info("Open your browser to configure and monitor BGP unicast routes.")
     log.info("Press Ctrl+C to stop.")
 
     # Keep running forever (session tasks are managed by SessionManager)

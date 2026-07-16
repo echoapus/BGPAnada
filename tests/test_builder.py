@@ -59,12 +59,6 @@ def test_open_router_id():
     assert socket.inet_ntoa(body[5:9]) == "10.20.30.40"
 
 
-def test_open_contains_flowspec_caps():
-    msg = build_open(65001, 90, "1.2.3.4")
-    # SAFI=133 (0x85) must appear in the capabilities
-    assert b'\x85' in msg
-
-
 def test_open_contains_unicast_caps():
     msg = build_open(65001, 90, "1.2.3.4")
     assert struct.pack("!HBB", 1, 0, 1) in msg

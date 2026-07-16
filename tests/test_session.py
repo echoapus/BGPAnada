@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from bgpx.constants import MSG_UPDATE
 from bgpx.events import EventBus
-from bgpx.rib import FlowspecRIB
+from bgpx.rib import UnicastRIB
 from bgpx.session import BGPSession, ESTABLISHED, OPEN_SENT, SessionConfig
 
 
@@ -43,7 +43,7 @@ def _session(cls=BGPSession):
         peer_ip=PEER_IP,
         peer_as=65300,
     )
-    return cls(cfg, FlowspecRIB(), events), events
+    return cls(cfg, UnicastRIB(), events), events
 
 
 def test_session_config_uses_fast_establish_defaults():
@@ -138,16 +138,15 @@ def test_update_dispatch_emits_announce_and_withdraw_events():
     async def run():
         session, events = _session()
         session._set_state(ESTABLISHED)
-        announce_route = {"dst-prefix": "203.0.113.0/24"}
-        withdraw_route = {"dst-prefix": "198.51.100.0/24"}
+        announce_route = {"prefix": "203.0.113.0/24", "next_hop": "192.0.2.254"}
+        withdraw_route = {"prefix": "198.51.100.0/24"}
 
-        path_attributes = [{"code": 16, "name": "EXTENDED_COMMUNITIES"}]
+        path_attributes = []
         with patch(
             "bgpx.session.parse_update_details",
             return_value={
-                "announce": {"ipv4-flowspec": [announce_route]},
-                "withdraw": {"ipv4-flowspec": [withdraw_route]},
-                "actions": ["discard"],
+                "announce": {"ipv4-unicast": [announce_route]},
+                "withdraw": {"ipv4-unicast": [withdraw_route]},
                 "path_attributes": path_attributes,
             },
         ):
@@ -155,12 +154,11 @@ def test_update_dispatch_emits_announce_and_withdraw_events():
 
         updates = [event for event in events.history() if event["level"] == "update"]
         assert [event["type"] for event in updates] == ["announce", "withdraw"]
-        assert updates[0]["message"] == "ANNOUNCE ipv4-flowspec"
-        assert updates[0]["match"] == announce_route
-        assert updates[0]["actions"] == ["discard"]
+        assert updates[0]["message"] == "ANNOUNCE ipv4-unicast"
+        assert updates[0]["prefix"] == announce_route["prefix"]
         assert updates[0]["path_attributes"] == path_attributes
-        assert updates[1]["message"] == "WITHDRAW ipv4-flowspec"
-        assert updates[1]["match"] == withdraw_route
+        assert updates[1]["message"] == "WITHDRAW ipv4-unicast"
+        assert updates[1]["prefix"] == withdraw_route["prefix"]
         assert updates[1]["path_attributes"] == path_attributes
         route = session.rib.all()[0]
         assert route["path_attributes"] == path_attributes
@@ -186,7 +184,6 @@ def test_update_dispatch_stores_unicast_route_metadata():
                     "next_hop": "192.0.2.254",
                 }]},
                 "withdraw": {},
-                "actions": [],
                 "path_attributes": path_attributes,
             },
         ):

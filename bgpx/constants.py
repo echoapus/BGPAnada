@@ -18,7 +18,6 @@ AFI_IPV6 = 2
 
 # Subsequent Address Family Identifiers
 SAFI_UNICAST  = 1
-SAFI_FLOWSPEC = 133   # RFC 8955 / RFC 8956
 
 # BGP Path Attribute Types
 ATTR_ORIGIN          = 1
@@ -42,35 +41,3 @@ ATTR_LARGE_COMMUNITIES = 32
 # BGP Header constants
 BGP_MARKER     = b'\xff' * 16
 BGP_HEADER_LEN = 19   # marker(16) + length(2) + type(1)
-
-# Flowspec NLRI component types (RFC 8955 §4.2)
-FLOWSPEC_TYPE_NAMES: dict[int, str] = {
-    1:  "dst-prefix",
-    2:  "src-prefix",
-    3:  "ip-proto",
-    4:  "port",
-    5:  "dst-port",
-    6:  "src-port",
-    7:  "icmp-type",
-    8:  "icmp-code",
-    9:  "tcp-flags",
-    10: "pkt-len",
-    11: "dscp",
-    12: "fragment",
-}
-
-# Extended community (type, subtype) pairs for flowspec actions (RFC 8955 §7)
-EC_TRAFFIC_RATE_BYTES   = (0x80, 0x06)
-EC_TRAFFIC_ACTION       = (0x80, 0x07)
-EC_RT_REDIRECT_AS2      = (0x80, 0x08)
-EC_RT_REDIRECT_IPV4     = (0x81, 0x08)
-EC_RT_REDIRECT_AS4      = (0x82, 0x08)
-EC_TRAFFIC_MARK         = (0x80, 0x09)
-EC_TRAFFIC_RATE_PACKETS = (0x80, 0x0C)
-
-# Draft redirect-to-IP action for IPv4-address-specific extended communities.
-EC_REDIRECT_TO_IPV4     = (0x01, 0x0C)
-
-# IPv6-address-specific extended-community action types.
-EC_REDIRECT_TO_IPV6     = 0x000C
-EC_RT_REDIRECT_IPV6     = 0x000D

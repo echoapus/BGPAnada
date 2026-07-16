@@ -1,6 +1,6 @@
 # bgpx
 
-BGP Unicast and FlowSpec receiver with a live web UI — version 26.181.  
+BGP IPv4/IPv6 Unicast receiver with a live web UI — version 26.181.
 Connects to a peer router, maintains an in-memory RIB, and streams everything to the browser via Server-Sent Events.
 
 ```bash
@@ -10,16 +10,14 @@ bgpx --local-as 65001 --router-id 192.0.2.2 --peer-ip 192.0.2.1 --peer-as 65000
 ```
 
 > **BGP session is IPv4-only.** `--peer-ip` and `--router-id` must be IPv4 addresses.  
-> Routes received over that session can be IPv4 or IPv6, unicast or FlowSpec.
+> Routes received over that session can be IPv4 or IPv6 unicast.
 
 ---
 
 ## Features
 
 - **Dual-mode connection** — races active-connect and passive-accept; first to succeed wins
-- **IPv4 + IPv6 FlowSpec** (RFC 8955/8956) — all NLRI types: prefix, port, protocol, TCP flags, DSCP, fragment, flow-label
 - **IPv4 + IPv6 unicast** — prefix, next-hop, AS path, standard / well-known / large communities
-- **All standard FlowSpec actions** — rate-limit (bps/pps), discard, redirect-to-VRF, redirect-to-IP, DSCP mark, traffic-action
 - **4-byte ASN** — `AS_TRANS`, `CAP_4BYTE_ASN`, `AS4_PATH` (RFC 6793)
 - **Hold-timer enforcement** — session resets on expiry
 - **Web UI** — sortable route table, live log with filter chips, analytics, packet capture viewer
@@ -81,8 +79,8 @@ Open `http://localhost:8080`. Session config is saved to `localStorage`.
 | Panel | What it shows |
 |---|---|
 | Sidebar | Configure and start/stop the BGP session |
-| **Total / Unicast / FlowSpec** tabs | Paginated, sortable route table |
-| **Analytics** tab | Family/AFI counts, top communities, origin AS, next-hops, prefix lengths, FlowSpec actions/protocols/ports |
+| **Total / Unicast** tabs | Paginated, sortable route table |
+| **Analytics** tab | Family/AFI counts, top communities, origin AS, next-hops, prefix lengths |
 | **Live Log** tab | SSE event stream — filter by SESSION / ANNOUNCE / WITHDRAW / ERROR / PCAP; click to expand JSON |
 | **◉ Capture** | Start/stop `tcpdump` on BGP traffic (requires `tcpdump` on `$PATH`) |
 | **⬇ Export** | Download the current table view as JSON |
@@ -90,10 +88,6 @@ Open `http://localhost:8080`. Session config is saved to `localStorage`.
 Header indicators:
 - **SSE dot** — green = live, pulsing yellow = reconnecting
 - **State badge** — `IDLE` → `CONNECT` → `OPEN_SENT` → `OPEN_CONFIRMED` → `ESTABLISHED`
-
----
-
-`traffic-rate-bytes` is decoded per RFC 8955 as bytes/second and rendered as network bits/second — e.g. `0.1 Mbps` from the router appears as `rate-limit=100000bps`.
 
 ---
 
@@ -105,8 +99,6 @@ Header indicators:
 | RFC 4360 | Extended Communities | ✅ |
 | RFC 4760 | MP-BGP / IPv6 Unicast | ✅ |
 | RFC 6793 | 4-Byte ASN | OPEN capability, AS_PATH, AS4_PATH ✅ |
-| RFC 8955 | IPv4 FlowSpec | All component types and actions ✅ |
-| RFC 8956 | IPv6 FlowSpec | All component types and actions ✅ |
 
 ---
 
@@ -117,14 +109,13 @@ bgpx/
 ├── cli.py          entry point, component wiring
 ├── manager.py      session start / stop / restart
 ├── session.py      BGP FSM, UPDATE dispatch
-├── rib.py          unicast + FlowSpec RIB, stats, pagination
+├── rib.py          unicast RIB, stats, pagination
 ├── events.py       event history, SSE fan-out
 ├── capture.py      tcpdump subprocess wrapper
 ├── api.py          aiohttp routes, SSE, health endpoint
 ├── message/
 │   ├── parser.py   BGP message parser (+ optional Rust PyO3 fast path)
 │   ├── builder.py  OPEN / KEEPALIVE / NOTIFICATION builders
-│   └── flowspec.py FlowSpec NLRI and extended-community parsing
 └── web/ui.html     single-file vanilla JS web UI
 ```
 

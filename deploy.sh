@@ -278,7 +278,7 @@ if [[ "${CREATE_SERVICE}" -eq 1 ]]; then
 
   cat >"${SERVICE_FILE}" <<EOF
 [Unit]
-Description=BGP Unicast and FlowSpec Receiver
+Description=BGP Unicast Receiver
 After=network-online.target
 Wants=network-online.target
 

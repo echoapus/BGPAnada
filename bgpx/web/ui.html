@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bgpx — BGP Unicast and FlowSpec Receiver</title>
+<title>bgpx — BGP Unicast Receiver</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -760,10 +760,6 @@ body {
         <span>Unicast</span>
         <span class="stat-val" id="s-unicast">0</span>
       </div>
-      <div class="stat-row">
-        <span>FlowSpec</span>
-        <span class="stat-val" id="s-flowspec">0</span>
-      </div>
     </div>
 
     <div class="sidebar-section" id="peer-info-section" style="display:none">
@@ -789,9 +785,6 @@ body {
       </button>
       <button class="tab-btn" id="tab-unicast-btn" onclick="switchTab('unicast')">
         Unicast <span class="tab-count" id="unicast-count">0</span>
-      </button>
-      <button class="tab-btn" id="tab-flowspec-btn" onclick="switchTab('flowspec')">
-        FlowSpec <span class="tab-count" id="flowspec-count">0</span>
       </button>
       <button class="tab-btn" id="tab-analytics-btn" onclick="switchTab('analytics')">
         Analytics
@@ -830,16 +823,12 @@ body {
       <div class="analytics-grid">
         <div class="analytics-card"><h3>Total routes</h3><div class="analytics-value" id="a-total">0</div></div>
         <div class="analytics-card"><h3>Unicast</h3><div class="analytics-value" id="a-unicast">0</div></div>
-        <div class="analytics-card"><h3>FlowSpec</h3><div class="analytics-value" id="a-flowspec">0</div></div>
         <div class="analytics-card"><h3>IPv4 / IPv6</h3><div class="analytics-list" id="a-afi">IPv4 0<br>IPv6 0</div></div>
         <div class="analytics-card"><h3>Updates</h3><div class="analytics-list" id="a-events">Announce 0<br>Withdraw 0</div></div>
         <div class="analytics-card"><h3>Top communities</h3><div class="analytics-list" id="a-communities">—</div></div>
         <div class="analytics-card"><h3>Origin AS</h3><div class="analytics-list" id="a-origin-as">—</div></div>
         <div class="analytics-card"><h3>Top next hops</h3><div class="analytics-list" id="a-next-hops">—</div></div>
         <div class="analytics-card"><h3>Prefix lengths</h3><div class="analytics-list" id="a-prefix-lengths">—</div></div>
-        <div class="analytics-card"><h3>FlowSpec actions</h3><div class="analytics-list" id="a-actions">—</div></div>
-        <div class="analytics-card"><h3>FlowSpec protocols</h3><div class="analytics-list" id="a-protocols">—</div></div>
-        <div class="analytics-card"><h3>FlowSpec ports</h3><div class="analytics-list" id="a-ports">—</div></div>
       </div>
     </div>
 
@@ -895,7 +884,7 @@ function updateThemeButton(isLight) {
 // ── State ──────────────────────────────────────────────────────────────────
 let routeRows       = [];         // current server-side page only
 let routeTotal      = 0;
-let ribStats        = { total:0, unicast:0, flowspec:0, ipv4:0, ipv6:0, analytics:{} };
+let ribStats        = { total:0, unicast:0, ipv4:0, ipv6:0, analytics:{} };
 let sessionRunning  = false;
 let logCount        = 0;
 let autoScroll      = true;
@@ -943,7 +932,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (['total', 'unicast', 'flowspec'].includes(name)) {
+  if (['total', 'unicast'].includes(name)) {
     currentView = name;
     currentPage = 1;
     document.getElementById('tab-routes').classList.add('active');
@@ -1118,10 +1107,8 @@ function updateFormState() {
 function updateRibStats() {
   setStat('s-total', ribStats.total || 0);
   setStat('s-unicast', ribStats.unicast || 0);
-  setStat('s-flowspec', ribStats.flowspec || 0);
   document.getElementById('total-count').textContent = ribStats.total || 0;
   document.getElementById('unicast-count').textContent = ribStats.unicast || 0;
-  document.getElementById('flowspec-count').textContent = ribStats.flowspec || 0;
   renderAnalytics();
 }
 
@@ -1135,16 +1122,12 @@ function renderAnalytics() {
   const a = ribStats.analytics || {};
   document.getElementById('a-total').textContent = ribStats.total || 0;
   document.getElementById('a-unicast').textContent = ribStats.unicast || 0;
-  document.getElementById('a-flowspec').textContent = ribStats.flowspec || 0;
   document.getElementById('a-afi').innerHTML = `IPv4 ${ribStats.ipv4 || 0}<br>IPv6 ${ribStats.ipv6 || 0}`;
   document.getElementById('a-events').innerHTML = `Announce ${announceCount}<br>Withdraw ${withdrawCount}`;
   document.getElementById('a-communities').innerHTML = renderCountBars(a.communities);
   document.getElementById('a-origin-as').innerHTML = renderCountBars(a.origin_as, 'AS');
   document.getElementById('a-next-hops').innerHTML = renderCountBars(a.next_hops);
   document.getElementById('a-prefix-lengths').innerHTML = renderCountBars(a.prefix_lengths);
-  document.getElementById('a-actions').innerHTML = renderCountBars(a.actions);
-  document.getElementById('a-protocols').innerHTML = renderCountBars(a.protocols);
-  document.getElementById('a-ports').innerHTML = renderCountBars(a.ports);
 }
 
 function renderCountBars(rows=[], prefix='') {
@@ -1178,7 +1161,6 @@ function queueRouteReload(flashId) {
 async function loadRoutes(flashId) {
   const request = ++routeRequest;
   const params = new URLSearchParams({
-    family: currentView,
     page: currentPage,
     page_size: pageSize,
     sort: sortCol,
@@ -1276,16 +1258,10 @@ function renderRouteHeader() {
       sortableHeader('Next Hop', 'next_hop'), sortableHeader('Peer', 'peer'),
       sortableHeader('Received', 'received_at'),
     ];
-  } else if (currentView === 'flowspec') {
-    columns = [
-      sortableHeader('AFI', 'afi'), '<th>Match Criteria</th>',
-      '<th>Actions</th>', sortableHeader('Peer', 'peer'),
-      sortableHeader('Received', 'received_at'),
-    ];
   } else {
     columns = [
-      sortableHeader('Type', 'family'), sortableHeader('AFI', 'afi'),
-      '<th>Route</th>', '<th>Policy / Path</th>',
+      sortableHeader('AFI', 'afi'), sortableHeader('Prefix', 'prefix'),
+      '<th>Community</th>', '<th>AS Path</th>', sortableHeader('Next Hop', 'next_hop'),
       sortableHeader('Peer', 'peer'), sortableHeader('Received', 'received_at'),
     ];
   }
@@ -1293,7 +1269,7 @@ function renderRouteHeader() {
 }
 
 function routeColumnCount() {
-  return currentView === 'unicast' ? 7 : currentView === 'flowspec' ? 5 : 6;
+  return 7;
 }
 
 function renderRouteRow(r, flashId) {
@@ -1311,25 +1287,12 @@ function renderRouteRow(r, flashId) {
       `<td class="id-cell">${escHtml(r.peer || '')}</td>` +
       received + end;
   }
-  if (currentView === 'flowspec') {
-    return start +
-      `<td>${afiBadge(r.afi)}</td>` +
-      `<td class="match-cell">${renderMatch(r.match)}</td>` +
-      `<td>${renderActions(r.actions || [])}</td>` +
-      `<td class="id-cell">${escHtml(r.peer || '')}</td>` +
-      received + end;
-  }
-  const route = r.family === 'unicast'
-    ? escHtml(r.prefix || '')
-    : renderMatch(r.match);
-  const policy = r.family === 'unicast'
-    ? escHtml((r.as_path || []).join(' ') || '—')
-    : renderActions(r.actions || []);
   return start +
-    `<td>${escHtml(r.family || '')}</td>` +
     `<td>${afiBadge(r.afi)}</td>` +
-    `<td class="match-cell">${route}</td>` +
-    `<td>${policy}</td>` +
+    `<td>${escHtml(r.prefix || '')}</td>` +
+    `<td>${renderCommunities(r.communities || [])}</td>` +
+    `<td>${escHtml((r.as_path || []).join(' ') || '—')}</td>` +
+    `<td>${escHtml(r.next_hop || '—')}</td>` +
     `<td class="id-cell">${escHtml(r.peer || '')}</td>` +
     received + end;
 }
@@ -1340,49 +1303,14 @@ function afiBadge(afi) {
   return `<span class="afi-badge ${cls}">${lbl}</span>`;
 }
 
-function renderMatch(match) {
-  const items = Object.entries(match || {}).map(([k, v]) => {
-    const val = Array.isArray(v) ? v.join(' ') : v;
-    return `<span class="match-item"><span class="match-key">${escHtml(k)}:</span> <span class="match-val">${escHtml(String(val))}</span></span>`;
-  });
-  if (!items.length) return '<span style="color:var(--text3)">—</span>';
-  const LIMIT = 3;
-  if (items.length <= LIMIT) return `<div class="match-inner" style="max-height: none;">${items.join('')}</div>`;
-  /* ponytail: render all items so they actually exist in DOM when expanded */
-  return `<div class="match-inner">${items.join('')}</div>
-          <span class="match-more" onclick="event.stopPropagation();this.previousElementSibling.classList.toggle('expanded');this.textContent=this.textContent.includes('+')?\`− less\`:\`+${items.length - LIMIT} more\`">+${items.length - LIMIT} more</span>`;
-}
-
-function renderActions(actions) {
-  return actions.map(a => {
-    let cls = 'action-other';
-    if (a === 'discard' || a === 'discard-packets') cls = 'action-discard';
-    else if (a.startsWith('rate-limit'))            cls = 'action-rate-limit';
-    else if (a.startsWith('redirect') || a.startsWith('rt-redirect') || a.startsWith('copy-to')) cls = 'action-redirect';
-    else if (a.startsWith('mark'))                  cls = 'action-mark';
-    else if (a.startsWith('unknown-flowspec'))       cls = 'action-unknown-ec';
-    return `<span class="action-badge ${cls}" title="${escHtml(a)}">${escHtml(formatRateLimit(a))}</span>`;
-  }).join('') || '<span style="color:var(--text3)">—</span>';
-}
-
 function renderCommunities(communities) {
   return communities.map(c =>
     `<span class="action-badge action-other">${escHtml(c)}</span>`
   ).join('') || '<span style="color:var(--text3)">—</span>';
 }
 
-function formatRateLimit(a) {
-  const m = a.match(/^rate-limit=(\d+)(bps|pps)$/);
-  if (!m) return a;
-  const n = parseInt(m[1], 10);
-  if (n >= 1e9) return `rate-limit=${(n/1e9).toFixed(2).replace(/\.?0+$/, '')}G${m[2]}`;
-  if (n >= 1e6) return `rate-limit=${(n/1e6).toFixed(2).replace(/\.?0+$/, '')}M${m[2]}`;
-  if (n >= 1e3) return `rate-limit=${(n/1e3).toFixed(2).replace(/\.?0+$/, '')}K${m[2]}`;
-  return a;
-}
-
 function exportRoutes() {
-  window.location.href = '/routes/export?family=' + encodeURIComponent(currentView);
+  window.location.href = '/routes/export';
 }
 
 // ── Live Log ───────────────────────────────────────────────────────────────
@@ -1475,13 +1403,7 @@ function logBadge(event) {
 function logMsg(event) {
   let msg = escHtml(event.message || '');
   if (event.type === 'announce' || event.type === 'withdraw') {
-    const parts = event.family === 'unicast'
-      ? [`prefix=${event.prefix || ''}`]
-      : Object.entries(event.match || {})
-        .map(([k,v]) => `${k}=${Array.isArray(v) ? v.join(' ') : v}`);
-    if (event.actions && event.actions.length)
-      parts.push('→ ' + event.actions.join(', '));
-    msg += `  <span style="color:var(--text2)">${escHtml(parts.join('  '))}</span>`;
+    msg += `  <span style="color:var(--text2)">${escHtml(`prefix=${event.prefix || ''}`)}</span>`;
   }
   return msg;
 }
@@ -1531,7 +1453,7 @@ async function stopSession() {
 function clearRoutes() {
   routeRows = [];
   routeTotal = 0;
-  ribStats = { total:0, unicast:0, flowspec:0, ipv4:0, ipv6:0, analytics:{} };
+  ribStats = { total:0, unicast:0, ipv4:0, ipv6:0, analytics:{} };
   currentPage = 1;
   renderRoutes();
   updateRibStats();

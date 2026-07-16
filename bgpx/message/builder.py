@@ -7,7 +7,7 @@ from bgpx.constants import (
     BGP_MARKER, BGP_HEADER_LEN,
     MSG_OPEN, MSG_KEEPALIVE, MSG_NOTIFICATION,
     CAP_MPBGP, CAP_4BYTE_ASN, AS_TRANS,
-    AFI_IPV4, AFI_IPV6, SAFI_FLOWSPEC,
+    AFI_IPV4, AFI_IPV6, SAFI_UNICAST,
 )
 
 
@@ -20,12 +20,10 @@ def _capability(code: int, data: bytes) -> bytes:
 
 
 def build_open(local_as: int, hold_time: int, router_id: str) -> bytes:
-    """Build a BGP OPEN message advertising IPv4 + IPv6 flowspec capabilities."""
+    """Build a BGP OPEN message advertising IPv4 + IPv6 unicast capabilities."""
     caps = (
-        _capability(CAP_MPBGP, struct.pack("!HBB", AFI_IPV4, 0, 1)) +
-        _capability(CAP_MPBGP, struct.pack("!HBB", AFI_IPV6, 0, 1)) +
-        _capability(CAP_MPBGP, struct.pack("!HBB", AFI_IPV4, 0, SAFI_FLOWSPEC)) +
-        _capability(CAP_MPBGP, struct.pack("!HBB", AFI_IPV6, 0, SAFI_FLOWSPEC)) +
+        _capability(CAP_MPBGP, struct.pack("!HBB", AFI_IPV4, 0, SAFI_UNICAST)) +
+        _capability(CAP_MPBGP, struct.pack("!HBB", AFI_IPV6, 0, SAFI_UNICAST)) +
         _capability(CAP_4BYTE_ASN, struct.pack("!I", local_as))
     )
     opt = b'\x02' + bytes([len(caps)]) + caps

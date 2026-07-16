@@ -4,14 +4,14 @@ import asyncio
 import logging
 
 from bgpx.events import EventBus
-from bgpx.rib import FlowspecRIB
+from bgpx.rib import UnicastRIB
 from bgpx.session import BGPSession, SessionConfig
 
 log = logging.getLogger(__name__)
 
 
 class SessionManager:
-    def __init__(self, events: EventBus, rib: FlowspecRIB):
+    def __init__(self, events: EventBus, rib: UnicastRIB):
         self._events  = events
         self._rib     = rib
         self._session: BGPSession | None = None

@@ -11,7 +11,7 @@ from bgpx.constants import (
 from bgpx.events import EventBus
 from bgpx.message.builder import build_open, build_keepalive
 from bgpx.message.parser import parse_header, parse_open, parse_update_details
-from bgpx.rib import FlowspecRIB
+from bgpx.rib import UnicastRIB
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class BGPSession:
     def __init__(
         self,
         config: SessionConfig,
-        rib:    FlowspecRIB,
+        rib:    UnicastRIB,
         events: EventBus | None = None,
     ):
         self.config     = config
@@ -355,38 +355,20 @@ class BGPSession:
             )
             announce = update["announce"]
             withdraw = update["withdraw"]
-            actions = update["actions"]
             path_attributes = update["path_attributes"]
             for afi, routes in announce.items():
                 for route in routes:
-                    if afi.endswith("-unicast"):
-                        as_path, communities = _unicast_attributes(path_attributes)
-                        route_id = self.rib.add_unicast(
-                            afi=afi,
-                            prefix=route["prefix"],
-                            peer=self.config.peer_ip,
-                            next_hop=route.get("next_hop", ""),
-                            as_path=as_path,
-                            communities=communities,
-                            path_attributes=path_attributes,
-                        )
-                        extra = {
-                            "family": "unicast",
-                            "prefix": route["prefix"],
-                            "next_hop": route.get("next_hop", ""),
-                            "as_path": as_path,
-                            "communities": communities,
-                        }
-                    else:
-                        route_id = self.rib.add_flowspec(
-                            afi, route, actions, self.config.peer_ip,
-                            path_attributes=path_attributes,
-                        )
-                        extra = {
-                            "family": "flowspec",
-                            "match": route,
-                            "actions": actions,
-                        }
+                    as_path, communities = _unicast_attributes(path_attributes)
+                    route_id = self.rib.add_unicast(
+                        afi=afi, prefix=route["prefix"], peer=self.config.peer_ip,
+                        next_hop=route.get("next_hop", ""), as_path=as_path,
+                        communities=communities, path_attributes=path_attributes,
+                    )
+                    extra = {
+                        "family": "unicast", "prefix": route["prefix"],
+                        "next_hop": route.get("next_hop", ""), "as_path": as_path,
+                        "communities": communities,
+                    }
                     self._emit(
                         "announce", f"ANNOUNCE {afi}",
                         level="update",
@@ -397,22 +379,10 @@ class BGPSession:
                     )
             for afi, routes in withdraw.items():
                 for route in routes:
-                    if afi.endswith("-unicast"):
-                        route_id = self.rib.remove_unicast(
-                            afi, route["prefix"], self.config.peer_ip
-                        )
-                        extra = {
-                            "family": "unicast",
-                            "prefix": route["prefix"],
-                        }
-                    else:
-                        route_id = self.rib.remove_flowspec(
-                            afi, route, self.config.peer_ip
-                        )
-                        extra = {
-                            "family": "flowspec",
-                            "match": route,
-                        }
+                    route_id = self.rib.remove_unicast(
+                        afi, route["prefix"], self.config.peer_ip
+                    )
+                    extra = {"family": "unicast", "prefix": route["prefix"]}
                     self._emit(
                         "withdraw", f"WITHDRAW {afi}",
                         level="update",

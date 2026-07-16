@@ -106,11 +106,7 @@ async def _routes(req: web.Request) -> web.Response:
         page_size = int(req.query.get("page_size", 50))
     except ValueError:
         return _err("page and page_size must be integers", 400)
-    family = req.query.get("family", "total")
-    if family not in ("total", "unicast", "flowspec"):
-        return _err("invalid family", 400)
     return web.json_response(req.app["rib"].page(
-        family=family,
         page=page,
         page_size=page_size,
         sort=req.query.get("sort", "received_at"),
@@ -119,9 +115,6 @@ async def _routes(req: web.Request) -> web.Response:
 
 
 async def _routes_export(req: web.Request) -> web.StreamResponse:
-    family = req.query.get("family", "total")
-    if family not in ("total", "unicast", "flowspec"):
-        return _err("invalid family", 400)
     resp = web.StreamResponse(headers={
         "Content-Type": "application/json",
         "Content-Disposition": 'attachment; filename="bgpx-routes.json"',
@@ -129,7 +122,7 @@ async def _routes_export(req: web.Request) -> web.StreamResponse:
     await resp.prepare(req)
     await resp.write(b'{"routes":[')
     first = True
-    for route in req.app["rib"].iter_routes(family):
+    for route in req.app["rib"].iter_routes():
         if not first:
             await resp.write(b",")
         first = False

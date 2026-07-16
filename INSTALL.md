@@ -44,7 +44,7 @@ bgpx --help
 Clone the repository:
 ```bash
 git clone <repo-url>
-cd BgpFlowspecReceiver
+cd BGPAnada
 ```
 
 Install in editable mode:
@@ -245,7 +245,7 @@ bgpx
 
 Open `http://localhost:8080` in your browser. You should see:
 - Configuration panel on the left
-- Total, Unicast, FlowSpec, Analytics, and Live Log tabs
+- Total, Unicast, Analytics, and Live Log tabs
 - "IDLE" state in the top-right badge
 
 If you installed with `deploy.sh`, open the Web UI port selected during deployment. For example, `--web-port 9090` means `http://localhost:9090`.
@@ -334,34 +334,6 @@ To switch back to Python and remove the optional `bgpx_rust` wheel:
 sudo ./deploy.sh
 ```
 
-### Issue: FlowSpec rate-limit looks 8x too small
-
-RFC 8955 encodes `traffic-rate-bytes` as bytes/second. bgpx renders that action
-as network bits/second, so `12500` bytes/second is shown as
-`rate-limit=100000bps` in JSON and `100Kbps` in the UI. If you still see
-`rate-limit=12500bps` after deploying with `--rust`, redeploy so the installed
-Rust PyO3 extension is rebuilt:
-
-```bash
-sudo ./deploy.sh --rust
-```
-
-### Issue: Juniper redirect appears as `ec=800b...`
-
-`0x80:0x0b` overlaps with the registered E-Tree Info extended-community subtype,
-so bgpx keeps it as a raw community instead of treating it as a standard
-FlowSpec redirect. If the UPDATE also has an MP_REACH next-hop, bgpx adds a
-Juniper-style hint such as:
-
-```text
-ec=800b000000000000(juniper-redirect-to-ipv4=192.168.1.1)
-```
-
-Use the `juniper-redirect-to-ipv4` value as the vendor interpretation, while
-the `ec=...` prefix preserves the original community bytes.
-
----
-
 ## Docker Advanced Usage
 
 ### Custom network
@@ -405,7 +377,7 @@ Create `/etc/systemd/system/bgpx.service`:
 
 ```ini
 [Unit]
-Description=BGP Unicast and FlowSpec Receiver
+Description=BGP Unicast Receiver
 After=network-online.target
 Wants=network-online.target
 
@@ -480,7 +452,7 @@ sudo ./uninstall.sh --install-dir /opt/custom-bgpx
 
 1. **Review Configuration** — see [README.md](README.md) for all flags and options
 2. **Test with a Peer** — connect to your BGP peer router
-3. **Monitor Routes** — use Total, Unicast, and FlowSpec tabs
+3. **Monitor Routes** — use the Total or Unicast tab
 4. **Export RIB** — use the web UI Export button to download routes as JSON
 5. **Set Up Monitoring** — integrate with your monitoring stack
 

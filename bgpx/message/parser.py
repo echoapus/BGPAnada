@@ -12,10 +12,7 @@ from bgpx.constants import (
     ATTR_MP_REACH_NLRI, ATTR_MP_UNREACH_NLRI, ATTR_EXT_COMMUNITIES,
     ATTR_AS4_PATH, ATTR_AS4_AGGREGATOR, ATTR_IPV6_EXT_COMMUNITIES,
     ATTR_LARGE_COMMUNITIES,
-    AFI_IPV4, AFI_IPV6, SAFI_FLOWSPEC,
-)
-from bgpx.message.flowspec import (
-    parse_nlri_list, parse_ext_communities, parse_ipv6_ext_communities,
+    AFI_IPV4, AFI_IPV6, SAFI_UNICAST,
 )
 
 # ponytail: import PyO3 native extension if available, transparent Python fallback
@@ -119,18 +116,6 @@ def parse_open(body: bytes) -> dict:
     }
 
 
-def parse_update(body: bytes) -> tuple[dict, dict, list]:
-    """Parse a BGP UPDATE message body.
-
-    Returns:
-        announce  – {afi_label: [route_dicts]}  routes being advertised
-        withdraw  – {afi_label: [route_dicts]}  routes being withdrawn
-        actions   – [str]  flowspec extended-community actions from this update
-    """
-    details = parse_update_details(body)
-    return details["announce"], details["withdraw"], details["actions"]
-
-
 def parse_update_details(body: bytes, asn_len: int = 2) -> dict:
     """Parse a BGP UPDATE and retain decoded/raw path-attribute metadata."""
     if _rust is not None:
@@ -158,7 +143,6 @@ def parse_update_details(body: bytes, asn_len: int = 2) -> dict:
 
     announce: dict = {}
     withdraw: dict = {}
-    actions:  list = []
     path_attributes: list[dict] = []
 
     while offset < attr_end:
@@ -191,18 +175,7 @@ def parse_update_details(body: bytes, asn_len: int = 2) -> dict:
         if atype == ATTR_MP_REACH_NLRI and len(abody) > 3:
             afi  = struct.unpack("!H", abody[0:2])[0]
             safi = abody[2]
-            if safi == SAFI_FLOWSPEC and afi in (AFI_IPV4, AFI_IPV6):
-                nh_len     = abody[3]
-                # Skip next-hop bytes + 1 reserved SNPA byte
-                nlri_start = 4 + nh_len + 1
-                if nlri_start > len(abody):
-                    raise ValueError("MP_REACH next-hop exceeds attribute length")
-                next_hop = _format_next_hop(abody[4:4 + nh_len])
-                if next_hop:
-                    _apply_flowspec_next_hop_actions(actions, next_hop, path_attributes)
-                label      = "ipv6-flowspec" if afi == AFI_IPV6 else "ipv4-flowspec"
-                announce[label] = parse_nlri_list(abody[nlri_start:], afi)
-            elif safi == 1 and afi in (AFI_IPV4, AFI_IPV6):
+            if safi == SAFI_UNICAST and afi in (AFI_IPV4, AFI_IPV6):
                 nh_len = abody[3]
                 nlri_start = 4 + nh_len + 1
                 if nlri_start > len(abody):
@@ -217,21 +190,12 @@ def parse_update_details(body: bytes, asn_len: int = 2) -> dict:
         elif atype == ATTR_MP_UNREACH_NLRI and len(abody) > 2:
             afi  = struct.unpack("!H", abody[0:2])[0]
             safi = abody[2]
-            if safi == SAFI_FLOWSPEC and afi in (AFI_IPV4, AFI_IPV6):
-                label      = "ipv6-flowspec" if afi == AFI_IPV6 else "ipv4-flowspec"
-                withdraw[label] = parse_nlri_list(abody[3:], afi)
-            elif safi == 1 and afi in (AFI_IPV4, AFI_IPV6):
+            if safi == SAFI_UNICAST and afi in (AFI_IPV4, AFI_IPV6):
                 label = "ipv6-unicast" if afi == AFI_IPV6 else "ipv4-unicast"
                 withdraw[label] = [
                     {"prefix": prefix}
                     for prefix in _parse_unicast_nlri(abody[3:], afi)
                 ]
-
-        elif atype == ATTR_EXT_COMMUNITIES:
-            actions.extend(parse_ext_communities(abody))
-
-        elif atype == ATTR_IPV6_EXT_COMMUNITIES:
-            actions.extend(parse_ipv6_ext_communities(abody))
 
     if withdrawn_payload:
         withdraw["ipv4-unicast"] = [
@@ -257,7 +221,6 @@ def parse_update_details(body: bytes, asn_len: int = 2) -> dict:
     return {
         "announce": announce,
         "withdraw": withdraw,
-        "actions": actions,
         "path_attributes": path_attributes,
     }
 
@@ -285,27 +248,6 @@ def _parse_unicast_nlri(payload: bytes, afi: int) -> list[str]:
         prefixes.append(str(ipaddress.ip_network(f"{address}/{prefix_len}", strict=False)))
 
     return prefixes
-
-
-def _apply_flowspec_next_hop_actions(
-    actions: list, next_hop: str, path_attributes: list[dict]
-) -> None:
-    def replace(values: list) -> None:
-        for i, action in enumerate(values):
-            if action == "redirect-to-next-hop":
-                values[i] = f"redirect-to-ipv4={next_hop}"
-            elif action == "copy-to-next-hop":
-                values[i] = f"copy-to-ipv4={next_hop}"
-            elif action.endswith("(juniper-redirect-to-next-hop)"):
-                values[i] = (
-                    action[:-len("(juniper-redirect-to-next-hop)")] +
-                    f"(juniper-redirect-to-ipv4={next_hop})"
-                )
-
-    replace(actions)
-    for attribute in path_attributes:
-        if attribute["code"] == ATTR_EXT_COMMUNITIES and isinstance(attribute.get("value"), list):
-            replace(attribute["value"])
 
 
 def _decode_path_attribute(
@@ -369,9 +311,6 @@ def _decode_path_attribute_value(atype: int, data: bytes, asn_len: int = 2):
     if atype in (ATTR_MP_REACH_NLRI, ATTR_MP_UNREACH_NLRI) and len(data) >= 3:
         return _parse_mp_attribute(data, atype)
 
-    if atype == ATTR_EXT_COMMUNITIES:
-        return parse_ext_communities(data)
-
     if atype == ATTR_AS4_PATH:
         return _parse_as_path(data, 4)
 
@@ -380,9 +319,6 @@ def _decode_path_attribute_value(atype: int, data: bytes, asn_len: int = 2):
             "asn": struct.unpack("!I", data[0:4])[0],
             "router_id": socket.inet_ntoa(data[4:8]),
         }
-
-    if atype == ATTR_IPV6_EXT_COMMUNITIES:
-        return parse_ipv6_ext_communities(data)
 
     if atype == ATTR_LARGE_COMMUNITIES:
         return _parse_large_communities(data)

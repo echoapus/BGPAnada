@@ -1,4 +1,4 @@
-"""In-memory Unicast and FlowSpec RIB."""
+"""In-memory unicast RIB."""
 
 import hashlib
 import json
@@ -7,15 +7,13 @@ from collections import Counter
 from datetime import datetime, timezone
 from itertools import islice
 
-from bgpx.message.flowspec import normalize_nlri_components
-
 log = logging.getLogger(__name__)
 
 
-def _route_id(family: str, afi: str, peer: str, route: dict) -> str:
-    """Deterministic ID scoped by family, AFI and peer."""
+def _route_id(afi: str, peer: str, route: dict) -> str:
+    """Deterministic ID scoped by AFI and peer."""
     canonical = json.dumps(
-        [family, afi, peer, route],
+        [afi, peer, route],
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -23,7 +21,7 @@ def _route_id(family: str, afi: str, peer: str, route: dict) -> str:
 
 
 # ponytail: threading.Lock removed because bgpx is purely single-threaded asyncio
-class FlowspecRIB:
+class UnicastRIB:
     def __init__(self):
         self._routes: dict[str, dict] = {}
         self._counts = Counter()
@@ -31,51 +29,11 @@ class FlowspecRIB:
             name: Counter()
             for name in (
                 "communities", "origin_as", "next_hops", "prefix_lengths",
-                "actions", "protocols", "ports",
             )
         }
         self._changes = 0
 
     # ── Public API ────────────────────────────────────────────────────────────
-
-    def add_flowspec(
-        self,
-        afi: str,
-        components: dict,
-        actions: list,
-        peer: str,
-        path_attributes: list[dict] | None = None,
-    ) -> str:
-        components = normalize_nlri_components(components)
-        route_id = _route_id("flowspec", afi, peer, components)
-        entry = {
-            "id":          route_id,
-            "family":      "flowspec",
-            "afi":         afi,
-            "peer":        peer,
-            "received_at": datetime.now(timezone.utc).isoformat(),
-            "match":       components,
-            "actions":     actions,
-        }
-        if path_attributes is not None:
-            entry["path_attributes"] = path_attributes
-        old = self._routes.pop(route_id, None)
-        if old:
-            self._remove_stats(old)
-        self._routes[route_id] = entry
-        self._add_stats(entry)
-
-        log.debug(
-            "RIB %s [%s] id=%s peer=%s match=%s actions=%s",
-            "UPDATE" if old else "ADD", afi, route_id, peer, components, actions,
-        )
-        self._changed()
-        return route_id
-
-    def remove_flowspec(self, afi: str, components: dict, peer: str) -> str | None:
-        components = normalize_nlri_components(components)
-        route_id = _route_id("flowspec", afi, peer, components)
-        return self._remove_id(route_id)
 
     def add_unicast(
         self,
@@ -87,7 +45,7 @@ class FlowspecRIB:
         communities: list[str] | None = None,
         path_attributes: list[dict] | None = None,
     ) -> str:
-        route_id = _route_id("unicast", afi, peer, {"prefix": prefix})
+        route_id = _route_id(afi, peer, {"prefix": prefix})
         entry = {
             "id": route_id,
             "family": "unicast",
@@ -113,7 +71,7 @@ class FlowspecRIB:
 
     def remove_unicast(self, afi: str, prefix: str, peer: str) -> str | None:
         return self._remove_id(
-            _route_id("unicast", afi, peer, {"prefix": prefix})
+            _route_id(afi, peer, {"prefix": prefix})
         )
 
     def clear_peer(self, peer: str) -> int:
@@ -126,18 +84,18 @@ class FlowspecRIB:
         return len(keys)
 
     def all(self) -> list[dict]:
-        return [self._normalized_route(r) for r in self._routes.values()]
+        return [dict(r) for r in self._routes.values()]
 
     def by_afi(self, afi: str) -> list[dict]:
         return [
-            self._normalized_route(r)
+            dict(r)
             for r in self._routes.values()
             if r["afi"] == afi
         ]
 
     def get(self, route_id: str) -> dict | None:
         route = self._routes.get(route_id)
-        return self._normalized_route(route) if route else None
+        return dict(route) if route else None
 
     def clear_all(self) -> int:
         count = len(self._routes)
@@ -151,14 +109,13 @@ class FlowspecRIB:
         return count
 
     def to_dict(self) -> dict:
-        routes = [self._normalized_route(r) for r in self._routes.values()]
+        routes = [dict(r) for r in self._routes.values()]
         return {"count": len(routes), "routes": routes}
 
     def stats(self) -> dict:
         return {
             "total": len(self._routes),
             "unicast": self._counts["unicast"],
-            "flowspec": self._counts["flowspec"],
             "ipv4": self._counts["ipv4"],
             "ipv6": self._counts["ipv6"],
             "analytics": {
@@ -169,30 +126,23 @@ class FlowspecRIB:
 
     def page(
         self,
-        family: str = "total",
         page: int = 1,
         page_size: int = 50,
         sort: str = "received_at",
         ascending: bool = False,
     ) -> dict:
-        allowed_sort = {"id", "family", "afi", "prefix", "next_hop", "peer", "received_at"}
+        allowed_sort = {"id", "afi", "prefix", "next_hop", "peer", "received_at"}
         if sort not in allowed_sort:
             sort = "received_at"
 
         values = self._routes.values()
         if sort == "received_at":
             ordered = values if ascending else reversed(values)
-            routes = (
-                route for route in ordered
-                if family == "total" or route["family"] == family
-            )
-            total = len(self._routes) if family == "total" else self._counts[family]
+            routes = iter(ordered)
+            total = len(self._routes)
         else:
             routes = sorted(
-                (
-                    route for route in values
-                    if family == "total" or route["family"] == family
-                ),
+                values,
                 key=lambda route: str(route.get(sort, "")).lower(),
                 reverse=not ascending,
             )
@@ -205,24 +155,17 @@ class FlowspecRIB:
             "page_size": page_size,
             "count": total,
             "routes": [
-                self._normalized_route(route)
+                dict(route)
                 for route in islice(routes, start, start + page_size)
             ],
             "stats": self.stats(),
         }
 
-    def iter_routes(self, family: str = "total"):
+    def iter_routes(self):
         for route in self._routes.values():
-            if family == "total" or route["family"] == family:
-                yield self._normalized_route(route)
+            yield dict(route)
 
     # ── Internal ──────────────────────────────────────────────────────────────
-
-    def _normalized_route(self, route: dict) -> dict:
-        normalized = dict(route)
-        if route.get("family") == "flowspec" or "match" in route:
-            normalized["match"] = normalize_nlri_components(route.get("match", {}))
-        return normalized
 
     def _remove_id(self, route_id: str) -> str | None:
         removed = self._routes.pop(route_id, None)
@@ -239,15 +182,13 @@ class FlowspecRIB:
             log.info("RIB contains %s routes", f"{len(self._routes):,}")
 
     def _add_stats(self, route: dict) -> None:
-        family = route["family"]
-        self._counts[family] += 1
+        self._counts["unicast"] += 1
         self._counts["ipv6" if str(route["afi"]).startswith("ipv6") else "ipv4"] += 1
         for name, values in self._route_metrics(route).items():
             self._analytics[name].update(values)
 
     def _remove_stats(self, route: dict) -> None:
-        family = route["family"]
-        self._counts.subtract([family])
+        self._counts.subtract(["unicast"])
         self._counts.subtract([
             "ipv6" if str(route["afi"]).startswith("ipv6") else "ipv4"
         ])
@@ -258,23 +199,13 @@ class FlowspecRIB:
 
     def _route_metrics(self, route: dict) -> dict[str, list]:
         metrics = {name: [] for name in self._analytics}
-        if route["family"] == "unicast":
-            metrics["communities"] = route.get("communities", [])
-            path = route.get("as_path", [])
-            if path:
-                metrics["origin_as"] = [str(path[-1])]
-            if route.get("next_hop"):
-                metrics["next_hops"] = [route["next_hop"]]
-            prefix_length = str(route.get("prefix", "")).partition("/")[2]
-            if prefix_length:
-                metrics["prefix_lengths"] = [f"/{prefix_length}"]
-        else:
-            match = route.get("match", {})
-            metrics["actions"] = route.get("actions", [])
-            metrics["protocols"] = match.get("ip-proto", [])
-            metrics["ports"] = (
-                match.get("port", [])
-                + match.get("src-port", [])
-                + match.get("dst-port", [])
-            )
+        metrics["communities"] = route.get("communities", [])
+        path = route.get("as_path", [])
+        if path:
+            metrics["origin_as"] = [str(path[-1])]
+        if route.get("next_hop"):
+            metrics["next_hops"] = [route["next_hop"]]
+        prefix_length = str(route.get("prefix", "")).partition("/")[2]
+        if prefix_length:
+            metrics["prefix_lengths"] = [f"/{prefix_length}"]
         return metrics
