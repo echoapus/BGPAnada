@@ -46,6 +46,8 @@ def _build_parser() -> argparse.ArgumentParser:
     bgp.add_argument("--reconnect-delay", type=int, default=5, metavar="SECS")
     bgp.add_argument("--connect-timeout", type=float, default=5.0, metavar="SECS")
     bgp.add_argument("--active-retry-delay", type=float, default=1.0, metavar="SECS")
+    bgp.add_argument("--parser-profile", action="store_true",
+                     help="Log periodic BGP UPDATE parser throughput statistics")
     web = p.add_argument_group("Web UI / REST API")
     web.add_argument("--host", default="0.0.0.0", metavar="ADDR",
                      help="Listen address (default: 0.0.0.0)")
@@ -63,7 +65,7 @@ async def _run(args: argparse.Namespace):
 
     events  = EventBus()
     rib     = UnicastRIB()
-    manager = SessionManager(events, rib)
+    manager = SessionManager(events, rib, parser_profile=args.parser_profile)
     capture = PacketCapture(events)
 
     # Auto-start session if BGP flags were provided
@@ -77,6 +79,7 @@ async def _run(args: argparse.Namespace):
             reconnect_delay = args.reconnect_delay,
             connect_timeout = args.connect_timeout,
             active_retry_delay = args.active_retry_delay,
+            parser_profile     = args.parser_profile,
         )
         await manager.start(cfg)
 

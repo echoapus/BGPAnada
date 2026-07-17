@@ -219,3 +219,15 @@ def test_update_dispatch_extracts_shared_attributes_once():
         attributes.assert_called_once_with(update["path_attributes"])
 
     asyncio.run(run())
+
+
+def test_parser_profile_logs_aggregated_update_stats():
+    session, _ = _session()
+    session.config.parser_profile = True
+    session._record_parser_profile(100, 2_000_000, 3, 1)
+
+    with patch("bgpx.session.log.info") as info:
+        session._log_parser_profile(force=True)
+
+    info.assert_called_once()
+    assert info.call_args.args[1:6] == (1, 100, 2.0, 3, 1)

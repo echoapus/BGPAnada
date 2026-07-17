@@ -38,6 +38,9 @@ bgpx --local-as 65001 --router-id 10.0.0.1 \
 bgpx --local-as 65001 --router-id 10.0.0.1 \
      --peer-ip 10.0.0.2 --peer-as 65000 \
      --log-level DEBUG
+
+# Log periodic UPDATE parser throughput statistics
+bgpx --parser-profile
 ```
 
 ### Docker
@@ -64,6 +67,10 @@ docker run --rm -p 179:179 -p 8080:8080 bgpx
 | `--host` | `0.0.0.0` | Web UI listen address |
 | `--port` | `8080` | Web UI listen port |
 | `--log-level` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `--parser-profile` | off | Every 60 seconds, log UPDATE count, bytes, average parser time, announces, and withdrawals; logs the final interval on shutdown |
+
+When run through the `deploy.sh --service` systemd unit, logs are appended to
+`/var/log/bgpx.log`.
 
 > **Port 179** requires root or:
 > ```bash

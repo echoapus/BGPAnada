@@ -11,9 +11,10 @@ log = logging.getLogger(__name__)
 
 
 class SessionManager:
-    def __init__(self, events: EventBus, rib: UnicastRIB):
+    def __init__(self, events: EventBus, rib: UnicastRIB, parser_profile: bool = False):
         self._events  = events
         self._rib     = rib
+        self._parser_profile = parser_profile
         self._session: BGPSession | None = None
         self._task:    asyncio.Task | None  = None
         self._config:  SessionConfig | None = None
@@ -25,6 +26,7 @@ class SessionManager:
             await self.stop()
 
         self._rib.clear_all()
+        config.parser_profile = self._parser_profile
         self._config  = config
         self._session = BGPSession(config, self._rib, self._events)
         self._task    = asyncio.create_task(self._session.run())

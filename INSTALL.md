@@ -185,6 +185,15 @@ Run with debug logging:
 bgpx --log-level DEBUG
 ```
 
+Collect parser throughput data for later optimization:
+```bash
+bgpx --parser-profile
+```
+
+This writes one summary every 60 seconds (and a final summary on shutdown) with
+UPDATE count, bytes, average parse time, announced routes, and withdrawn routes.
+Omit `--parser-profile` to disable it.
+
 ---
 
 ## Verification
@@ -319,11 +328,15 @@ sudo ./deploy.sh --service --cap-net-bind-service --web-port 8080
 ```
 
 The script enables, starts, and prints status for `bgpx.service`. The generated
-service uses `/opt/bgpx/app` as the working directory and starts:
+service uses `/opt/bgpx/app` as the working directory, appends logs to
+`/var/log/bgpx.log`, and starts:
 
 ```bash
 /opt/bgpx/venv/bin/bgpx --host 0.0.0.0 --port <selected-web-port>
 ```
+
+To profile a generated service, add `--parser-profile` to its `ExecStart` line,
+then run `sudo systemctl daemon-reload && sudo systemctl restart bgpx`.
 
 ### Manual systemd Service
 
@@ -339,12 +352,17 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/bgpx/app
 ExecStart=/opt/bgpx/venv/bin/bgpx --host 0.0.0.0 --port 8080
+StandardOutput=append:/var/log/bgpx.log
+StandardError=append:/var/log/bgpx.log
 Restart=on-failure
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+Append `--parser-profile` to `ExecStart` when parser throughput data is needed;
+remove it and restart the service to disable profiling.
 
 To bind BGP port 179 without running the process as root, grant the installed Python binary the capability:
 
@@ -362,7 +380,7 @@ sudo systemctl status bgpx
 
 View logs:
 ```bash
-sudo journalctl -u bgpx -f
+sudo tail -f /var/log/bgpx.log
 ```
 
 ---

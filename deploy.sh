@@ -296,6 +296,8 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${APP_DIR}
 ExecStart=${VENV_DIR}/bin/bgpx --host 0.0.0.0 --port ${WEB_PORT}
+StandardOutput=append:/var/log/bgpx.log
+StandardError=append:/var/log/bgpx.log
 Restart=on-failure
 RestartSec=5
 

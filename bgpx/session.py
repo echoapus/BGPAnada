@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
+from time import monotonic, perf_counter_ns
 
 from bgpx.constants import (
     BGP_HEADER_LEN,
@@ -34,6 +35,7 @@ class SessionConfig:
     connect_timeout: float         = 5.0
     active_retry_delay: float      = 1.0
     listen_port:     int           = 179
+    parser_profile:  bool          = False
 
 
 @dataclass
@@ -59,6 +61,9 @@ class BGPSession:
         self._hold_time = config.hold_time
         self._ka_task:  asyncio.Task | None = None
         self._running   = True
+        self._profile_since = monotonic()
+        self._profile_updates = self._profile_bytes = self._profile_parse_ns = 0
+        self._profile_announces = self._profile_withdraws = 0
 
         # Queue fed by the persistent passive server
         # Size=1 so we don't accumulate stale connections
@@ -93,6 +98,7 @@ class BGPSession:
 
     def stop(self):
         self._running = False
+        self._log_parser_profile(force=True)
 
     # ── Persistent passive server ─────────────────────────────────────────────
 
@@ -349,6 +355,7 @@ class BGPSession:
         elif msg_type == MSG_UPDATE:
             if self._state != ESTABLISHED:
                 return
+            started = perf_counter_ns() if self.config.parser_profile else 0
             update = parse_update_details(
                 body,
                 asn_len=4 if self._peer_info.get("supports_4byte_asn") else 2,
@@ -356,6 +363,12 @@ class BGPSession:
             announce = update["announce"]
             withdraw = update["withdraw"]
             path_attributes = update["path_attributes"]
+            if self.config.parser_profile:
+                self._record_parser_profile(
+                    len(body), perf_counter_ns() - started,
+                    sum(len(routes) for routes in announce.values()),
+                    sum(len(routes) for routes in withdraw.values()),
+                )
             as_path, communities = _unicast_attributes(path_attributes)
             for afi, routes in announce.items():
                 for route in routes:
@@ -410,6 +423,30 @@ class BGPSession:
     def _emit(self, event_type: str, message: str, level: str = "info", **kw):
         if self._events:
             self._events.emit(event_type, level, message, **kw)
+
+    def _record_parser_profile(self, size: int, elapsed_ns: int, announces: int, withdraws: int):
+        self._profile_updates += 1
+        self._profile_bytes += size
+        self._profile_parse_ns += elapsed_ns
+        self._profile_announces += announces
+        self._profile_withdraws += withdraws
+        self._log_parser_profile()
+
+    def _log_parser_profile(self, force: bool = False):
+        if not self.config.parser_profile or not self._profile_updates:
+            return
+        elapsed = monotonic() - self._profile_since
+        if not force and elapsed < 60:
+            return
+        average_ms = self._profile_parse_ns / self._profile_updates / 1_000_000
+        log.info(
+            "Parser profile: updates=%d bytes=%d avg_parse_ms=%.3f announces=%d withdraws=%d window_s=%.1f",
+            self._profile_updates, self._profile_bytes, average_ms,
+            self._profile_announces, self._profile_withdraws, elapsed,
+        )
+        self._profile_since = monotonic()
+        self._profile_updates = self._profile_bytes = self._profile_parse_ns = 0
+        self._profile_announces = self._profile_withdraws = 0
 
     def _set_state(self, state: str):
         self._state = state
