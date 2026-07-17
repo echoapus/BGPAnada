@@ -231,3 +231,19 @@ def test_parser_profile_logs_aggregated_update_stats():
 
     info.assert_called_once()
     assert info.call_args.args[1:6] == (1, 100, 2.0, 3, 1)
+
+
+def test_update_dispatch_batches_large_route_events():
+    async def run():
+        session, events = _session()
+        session._set_state(ESTABLISHED)
+        routes = [{"prefix": f"10.0.{n // 256}.{n % 256}/32"} for n in range(101)]
+        with patch("bgpx.session.parse_update_details", return_value={
+            "announce": {"ipv4-unicast": routes}, "withdraw": {}, "path_attributes": [],
+        }):
+            await session._dispatch(MSG_UPDATE, b"", FakeWriter())
+        updates = [event for event in events.history() if event["level"] == "update"]
+        assert len(updates) == 1
+        assert updates[0]["count"] == 101
+
+    asyncio.run(run())

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from time import monotonic, perf_counter_ns
 
 from bgpx.constants import (
@@ -370,39 +371,61 @@ class BGPSession:
                     sum(len(routes) for routes in withdraw.values()),
                 )
             as_path, communities = _unicast_attributes(path_attributes)
+            received_at = datetime.now(timezone.utc).isoformat()
             for afi, routes in announce.items():
+                bulk = len(routes) > 100
+                last_route_id = None
                 for route in routes:
                     route_id = self.rib.add_unicast(
                         afi=afi, prefix=route["prefix"], peer=self.config.peer_ip,
                         next_hop=route.get("next_hop", ""), as_path=as_path,
                         communities=communities, path_attributes=path_attributes,
+                        received_at=received_at,
                     )
+                    last_route_id = route_id
                     extra = {
                         "family": "unicast", "prefix": route["prefix"],
                         "next_hop": route.get("next_hop", ""), "as_path": as_path,
                         "communities": communities,
                     }
+                    if not bulk:
+                        self._emit(
+                            "announce", f"ANNOUNCE {afi}",
+                            level="update",
+                            afi=afi, route_id=route_id,
+                            path_attributes=path_attributes,
+                            peer=self.config.peer_ip,
+                            **extra,
+                        )
+                if bulk:
                     self._emit(
-                        "announce", f"ANNOUNCE {afi}",
-                        level="update",
-                        afi=afi, route_id=route_id,
-                        path_attributes=path_attributes,
-                        peer=self.config.peer_ip,
-                        **extra,
+                        "announce", f"ANNOUNCE {afi} ({len(routes)} routes)",
+                        level="update", afi=afi, route_id=last_route_id,
+                        peer=self.config.peer_ip, count=len(routes),
                     )
             for afi, routes in withdraw.items():
+                bulk = len(routes) > 100
+                last_route_id = None
                 for route in routes:
                     route_id = self.rib.remove_unicast(
                         afi, route["prefix"], self.config.peer_ip
                     )
+                    last_route_id = route_id
                     extra = {"family": "unicast", "prefix": route["prefix"]}
+                    if not bulk:
+                        self._emit(
+                            "withdraw", f"WITHDRAW {afi}",
+                            level="update",
+                            afi=afi, route_id=route_id,
+                            path_attributes=path_attributes,
+                            peer=self.config.peer_ip,
+                            **extra,
+                        )
+                if bulk:
                     self._emit(
-                        "withdraw", f"WITHDRAW {afi}",
-                        level="update",
-                        afi=afi, route_id=route_id,
-                        path_attributes=path_attributes,
-                        peer=self.config.peer_ip,
-                        **extra,
+                        "withdraw", f"WITHDRAW {afi} ({len(routes)} routes)",
+                        level="update", afi=afi, route_id=last_route_id,
+                        peer=self.config.peer_ip, count=len(routes),
                     )
 
         elif msg_type == MSG_NOTIFICATION:

@@ -2,7 +2,6 @@
 
 import hashlib
 import ipaddress
-import json
 import logging
 import re
 from collections import Counter, deque
@@ -15,12 +14,7 @@ log = logging.getLogger(__name__)
 
 def _route_id(afi: str, peer: str, route: dict) -> str:
     """Deterministic ID scoped by AFI and peer."""
-    canonical = json.dumps(
-        [afi, peer, route],
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha1(canonical.encode()).hexdigest()[:12]
+    return hashlib.sha1(f"{afi}\0{peer}\0{route['prefix']}".encode()).hexdigest()[:12]
 
 
 # ponytail: threading.Lock removed because bgpx is purely single-threaded asyncio
@@ -37,6 +31,7 @@ class UnicastRIB:
         }
         self._churn: deque[tuple[int, Counter]] = deque(maxlen=60)
         self._changes = 0
+        self._last_progress_log = monotonic()
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -49,6 +44,7 @@ class UnicastRIB:
         as_path: list[int] | None = None,
         communities: list[str] | None = None,
         path_attributes: list[dict] | None = None,
+        received_at: str | None = None,
     ) -> str:
         route_id = _route_id(afi, peer, {"prefix": prefix})
         entry = {
@@ -56,7 +52,7 @@ class UnicastRIB:
             "family": "unicast",
             "afi": afi,
             "peer": peer,
-            "received_at": datetime.now(timezone.utc).isoformat(),
+            "received_at": received_at or datetime.now(timezone.utc).isoformat(),
             "prefix": prefix,
             "next_hop": next_hop,
             "as_path": as_path or [],
@@ -213,8 +209,9 @@ class UnicastRIB:
 
     def _changed(self) -> None:
         self._changes += 1
-        if self._changes % 10_000 == 0:
+        if monotonic() - self._last_progress_log >= 60:
             log.info("RIB contains %s routes", f"{len(self._routes):,}")
+            self._last_progress_log = monotonic()
 
     def _record_churn(self, kind: str) -> None:
         minute = int(monotonic() // 60)
