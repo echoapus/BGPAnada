@@ -466,7 +466,7 @@ fn as_path_py(py: Python, data: &[u8], asn_len: usize) -> Result<PyObject, ()> {
 }
 
 fn communities_py(py: Python, data: &[u8]) -> Result<PyObject, ()> {
-    if !data.len().is_multiple_of(4) {
+    if data.len() % 4 != 0 {
         return Err(());
     }
     let out = PyList::empty_bound(py);
@@ -489,7 +489,7 @@ fn communities_py(py: Python, data: &[u8]) -> Result<PyObject, ()> {
 }
 
 fn cluster_list_py(py: Python, data: &[u8]) -> Result<PyObject, ()> {
-    if !data.len().is_multiple_of(4) {
+    if data.len() % 4 != 0 {
         return Err(());
     }
     let out = PyList::empty_bound(py);
@@ -501,7 +501,7 @@ fn cluster_list_py(py: Python, data: &[u8]) -> Result<PyObject, ()> {
 }
 
 fn large_communities_py(py: Python, data: &[u8]) -> Result<PyObject, ()> {
-    if !data.len().is_multiple_of(12) {
+    if data.len() % 12 != 0 {
         return Err(());
     }
     let out = PyList::empty_bound(py);

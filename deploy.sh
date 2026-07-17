@@ -58,6 +58,28 @@ require_safe_install_dir() {
   esac
 }
 
+inherit_proxy_env() {
+  # sudo often removes proxy variables; recover them from the invoking shell on Linux.
+  [[ -d /proc ]] || return
+
+  local name entry parent="${PPID}"
+  for name in http_proxy https_proxy no_proxy all_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY; do
+    [[ -v "${name}" ]] && continue
+    while [[ "${parent}" =~ ^[0-9]+$ && "${parent}" -gt 1 ]]; do
+      [[ -r "/proc/${parent}/environ" ]] || break
+      while IFS= read -r -d '' entry; do
+        if [[ "${entry}" == "${name}="* ]]; then
+          printf -v "${name}" '%s' "${entry#*=}"
+          export "${name}"
+          break 2
+        fi
+      done < "/proc/${parent}/environ"
+      parent="$(awk '/^PPid:/ { print $2 }' "/proc/${parent}/status")"
+    done
+    parent="${PPID}"
+  done
+}
+
 prompt_web_port() {
   local value
 
@@ -120,6 +142,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_safe_install_dir
+inherit_proxy_env
 
 if [[ "${EUID}" -ne 0 && "${INSTALL_DIR}" == /opt* ]]; then
   echo "Installing to ${INSTALL_DIR} requires root. Re-run with sudo or choose --install-dir." >&2
