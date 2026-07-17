@@ -371,6 +371,7 @@ class BGPSession:
                     sum(len(routes) for routes in withdraw.values()),
                 )
             as_path, communities = _unicast_attributes(path_attributes)
+            path_attributes_key = self.rib.path_attributes_key(path_attributes)
             received_at = datetime.now(timezone.utc).isoformat()
             for afi, routes in announce.items():
                 bulk = len(routes) > 100
@@ -380,6 +381,7 @@ class BGPSession:
                         afi=afi, prefix=route["prefix"], peer=self.config.peer_ip,
                         next_hop=route.get("next_hop", ""), as_path=as_path,
                         communities=communities, path_attributes=path_attributes,
+                        path_attributes_key=path_attributes_key,
                         received_at=received_at,
                     )
                     last_route_id = route_id

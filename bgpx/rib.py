@@ -2,6 +2,7 @@
 
 import hashlib
 import ipaddress
+import json
 import logging
 import re
 from collections import Counter, deque
@@ -31,7 +32,9 @@ class UnicastRIB:
         }
         self._churn: deque[tuple[int, Counter]] = deque(maxlen=60)
         self._changes = 0
-        self._last_progress_log = monotonic()
+        self._last_progress_log: float | None = None
+        self._attribute_sets: dict[str, tuple[list[dict], int]] = {}
+        self._route_attribute_keys: dict[str, str] = {}
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -44,6 +47,7 @@ class UnicastRIB:
         as_path: list[int] | None = None,
         communities: list[str] | None = None,
         path_attributes: list[dict] | None = None,
+        path_attributes_key: str | None = None,
         received_at: str | None = None,
     ) -> str:
         route_id = _route_id(afi, peer, {"prefix": prefix})
@@ -58,11 +62,14 @@ class UnicastRIB:
             "as_path": as_path or [],
             "communities": communities or [],
         }
-        if path_attributes is not None:
-            entry["path_attributes"] = path_attributes
         old = self._routes.pop(route_id, None)
         if old:
+            self._release_path_attributes(route_id)
             self._remove_stats(old)
+        if path_attributes is not None:
+            entry["path_attributes"] = self._retain_path_attributes(
+                route_id, path_attributes, path_attributes_key
+            )
         self._routes[route_id] = entry
         self._add_stats(entry)
         self._record_churn("announce")
@@ -80,6 +87,7 @@ class UnicastRIB:
         keys = [k for k, v in self._routes.items() if v["peer"] == peer]
         for k in keys:
             self._remove_stats(self._routes.pop(k))
+            self._release_path_attributes(k)
         if keys:
             log.info(f"RIB cleared {len(keys)} route(s) from peer {peer}")
             self._changed()
@@ -120,6 +128,8 @@ class UnicastRIB:
     def clear_all(self) -> int:
         count = len(self._routes)
         self._routes.clear()
+        self._attribute_sets.clear()
+        self._route_attribute_keys.clear()
         self._counts.clear()
         for values in self._analytics.values():
             values.clear()
@@ -202,6 +212,7 @@ class UnicastRIB:
         if not removed:
             return None
         self._remove_stats(removed)
+        self._release_path_attributes(route_id)
         self._record_churn("withdraw")
         log.debug("RIB DEL id=%s", route_id)
         self._changed()
@@ -209,9 +220,39 @@ class UnicastRIB:
 
     def _changed(self) -> None:
         self._changes += 1
-        if monotonic() - self._last_progress_log >= 60:
+        now = monotonic()
+        if self._last_progress_log is None:
+            self._last_progress_log = now
+        elif now - self._last_progress_log >= 60:
             log.info("RIB contains %s routes", f"{len(self._routes):,}")
-            self._last_progress_log = monotonic()
+            self._last_progress_log = now
+
+    def path_attributes_key(self, attributes: list[dict]) -> str:
+        encoded = json.dumps(attributes, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode()).hexdigest()
+
+    def _retain_path_attributes(
+        self, route_id: str, attributes: list[dict], key: str | None
+    ) -> list[dict]:
+        key = key or self.path_attributes_key(attributes)
+        cached = self._attribute_sets.get(key)
+        if cached:
+            attributes, count = cached
+            self._attribute_sets[key] = (attributes, count + 1)
+        else:
+            self._attribute_sets[key] = (attributes, 1)
+        self._route_attribute_keys[route_id] = key
+        return self._attribute_sets[key][0]
+
+    def _release_path_attributes(self, route_id: str) -> None:
+        key = self._route_attribute_keys.pop(route_id, None)
+        if key is None:
+            return
+        attributes, count = self._attribute_sets[key]
+        if count > 1:
+            self._attribute_sets[key] = (attributes, count - 1)
+        else:
+            self._attribute_sets.pop(key)
 
     def _record_churn(self, kind: str) -> None:
         minute = int(monotonic() // 60)
