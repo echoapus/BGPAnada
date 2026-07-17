@@ -366,6 +366,9 @@ body {
 .filter-chip:hover { border-color: var(--text2); color: var(--text); }
 .filter-chip.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 .filter-label { font-size: 11px; color: var(--text3); margin-right: 2px; }
+.route-lookup { display: flex; gap: 6px; padding: 8px 12px; background: var(--bg1); border-bottom: 1px solid var(--border); }
+.route-lookup input { width: min(320px, 100%); padding: 6px 9px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg0); color: var(--text); font-family: var(--mono); }
+.route-lookup-status { align-self: center; color: var(--text2); font-size: 12px; }
 
 /* ── Routes table ── */
 .routes-wrap { flex: 1; overflow: auto; }
@@ -805,6 +808,16 @@ body {
 
     <!-- Routes tab -->
     <div class="tab-content active" id="tab-routes">
+      <div class="route-lookup">
+        <input id="route-lookup-ip" type="text" placeholder="Lookup IP, e.g. 203.0.113.1" onkeydown="if(event.key === 'Enter') lookupRoute()">
+        <button class="icon-btn" onclick="lookupRoute()">Lookup</button>
+        <input id="route-lookup-community" type="text" placeholder="Community, e.g. 65000:100" onkeydown="if(event.key === 'Enter') lookupCommunity()">
+        <button class="icon-btn" onclick="lookupCommunity()">Community</button>
+        <input id="route-lookup-as-path" type="text" placeholder="AS regex, e.g. ^6500[0-9]$" onkeydown="if(event.key === 'Enter') lookupAsPath()">
+        <button class="icon-btn" onclick="lookupAsPath()">AS Regex</button>
+        <button class="icon-btn" onclick="clearRouteLookup()">Clear</button>
+        <span class="route-lookup-status" id="route-lookup-status"></span>
+      </div>
       <div class="routes-wrap">
         <table class="routes-table" id="routes-table">
           <thead id="routes-head"></thead>
@@ -908,6 +921,8 @@ let sortAsc = false;
 // ponytail: pagination state
 let currentPage = 1;
 const pageSize = 50;
+let routeLookup = '';
+let routeLookupKind = '';
 
 // ── Init ───────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
@@ -1176,7 +1191,14 @@ async function loadRoutes(flashId) {
     order: sortAsc ? 'asc' : 'desc',
   });
   try {
-    const response = await fetch('/routes?' + params);
+    const endpoint = routeLookupKind === 'ip'
+      ? '/routes/lookup?ip=' + encodeURIComponent(routeLookup)
+      : routeLookupKind === 'community'
+        ? '/routes/community?community=' + encodeURIComponent(routeLookup) + '&' + params
+        : routeLookupKind === 'as-path'
+          ? '/routes/as-path?pattern=' + encodeURIComponent(routeLookup) + '&' + params
+          : '/routes?' + params;
+    const response = await fetch(endpoint);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || response.statusText);
     if (request !== routeRequest) return;
@@ -1185,9 +1207,48 @@ async function loadRoutes(flashId) {
     ribStats = data.stats || ribStats;
     updateRibStats();
     renderRoutes(flashId);
+    document.getElementById('route-lookup-status').textContent = routeLookupKind === 'ip'
+      ? (routeTotal ? `Best match: ${routeRows[0].prefix}` : 'No matching BGP route')
+      : routeLookupKind ? `${routeTotal} matching route${routeTotal === 1 ? '' : 's'}` : '';
   } catch (e) {
+    document.getElementById('route-lookup-status').textContent = routeLookupKind ? e.message : '';
     document.getElementById('page-info').textContent = 'Route load failed';
   }
+}
+
+async function lookupRoute() {
+  const address = document.getElementById('route-lookup-ip').value.trim();
+  if (!address) return clearRouteLookup();
+  routeLookup = address;
+  routeLookupKind = 'ip';
+  loadRoutes();
+}
+
+function lookupCommunity() {
+  const community = document.getElementById('route-lookup-community').value.trim();
+  if (!community) return clearRouteLookup();
+  routeLookup = community;
+  routeLookupKind = 'community';
+  currentPage = 1;
+  loadRoutes();
+}
+
+function lookupAsPath() {
+  const asPath = document.getElementById('route-lookup-as-path').value.trim();
+  if (!asPath) return clearRouteLookup();
+  routeLookup = asPath;
+  routeLookupKind = 'as-path';
+  currentPage = 1;
+  loadRoutes();
+}
+
+function clearRouteLookup() {
+  document.getElementById('route-lookup-ip').value = '';
+  document.getElementById('route-lookup-community').value = '';
+  document.getElementById('route-lookup-as-path').value = '';
+  routeLookup = '';
+  routeLookupKind = '';
+  loadRoutes();
 }
 
 function renderRoutes(flashId) {
@@ -1204,6 +1265,12 @@ function renderRoutes(flashId) {
   }
 
   const totalRoutes = routeTotal;
+  if (routeLookupKind === 'ip') {
+    document.getElementById('page-info').textContent = `${totalRoutes} best-match route${totalRoutes === 1 ? '' : 's'}`;
+    document.getElementById('btn-prev-page').disabled = true;
+    document.getElementById('btn-next-page').disabled = true;
+    return;
+  }
   const totalPages = Math.ceil(totalRoutes / pageSize);
   if (currentPage > totalPages) currentPage = totalPages || 1;
   if (currentPage < 1) currentPage = 1;

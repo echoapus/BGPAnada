@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from importlib import resources
 from datetime import datetime, timezone
 
@@ -28,6 +29,9 @@ def create_app(manager, rib, events, capture) -> web.Application:
     app.router.add_post("/capture/start",    _capture_start)
     app.router.add_post("/capture/stop",     _capture_stop)
     app.router.add_delete("/log",            _log_clear)
+    app.router.add_get("/routes/lookup",      _routes_lookup)
+    app.router.add_get("/routes/community",   _routes_community)
+    app.router.add_get("/routes/as-path",     _routes_as_path)
     app.router.add_get("/routes",             _routes)
     app.router.add_get("/routes/export",      _routes_export)
     app.router.add_get("/events",            _sse)
@@ -111,6 +115,52 @@ async def _routes(req: web.Request) -> web.Response:
         page_size=page_size,
         sort=req.query.get("sort", "received_at"),
         ascending=req.query.get("order", "desc") == "asc",
+    ))
+
+
+async def _routes_lookup(req: web.Request) -> web.Response:
+    address = req.query.get("ip", "")
+    try:
+        routes = req.app["rib"].lookup(address)
+    except ValueError:
+        return _err("ip must be a valid IPv4 or IPv6 address", 400)
+    return web.json_response({"ip": address, "count": len(routes), "routes": routes})
+
+
+async def _routes_community(req: web.Request) -> web.Response:
+    community = req.query.get("community", "")
+    if not community:
+        return _err("community is required", 400)
+    try:
+        page = int(req.query.get("page", 1))
+        page_size = int(req.query.get("page_size", 50))
+    except ValueError:
+        return _err("page and page_size must be integers", 400)
+    return web.json_response(req.app["rib"].page(
+        page=page,
+        page_size=page_size,
+        sort=req.query.get("sort", "received_at"),
+        ascending=req.query.get("order", "desc") == "asc",
+        community=community,
+    ))
+
+
+async def _routes_as_path(req: web.Request) -> web.Response:
+    pattern = req.query.get("pattern", "")
+    try:
+        if not pattern or len(pattern) > 128:
+            raise ValueError
+        as_path_regex = re.compile(pattern)
+        page = int(req.query.get("page", 1))
+        page_size = int(req.query.get("page_size", 50))
+    except (ValueError, re.error):
+        return _err("pattern must be a valid AS path regex up to 128 characters", 400)
+    return web.json_response(req.app["rib"].page(
+        page=page,
+        page_size=page_size,
+        sort=req.query.get("sort", "received_at"),
+        ascending=req.query.get("order", "desc") == "asc",
+        as_path_regex=as_path_regex,
     ))
 
 

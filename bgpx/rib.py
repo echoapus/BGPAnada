@@ -1,8 +1,10 @@
 """In-memory unicast RIB."""
 
 import hashlib
+import ipaddress
 import json
 import logging
+import re
 from collections import Counter, deque
 from datetime import datetime, timezone
 from itertools import islice
@@ -101,6 +103,24 @@ class UnicastRIB:
         route = self._routes.get(route_id)
         return dict(route) if route else None
 
+    def lookup(self, address: str) -> list[dict]:
+        target = ipaddress.ip_address(address)
+        best_length = -1
+        matches: list[dict] = []
+        # ponytail: linear scan; add a prefix trie only if lookup volume warrants it.
+        for route in self._routes.values():
+            try:
+                network = ipaddress.ip_network(route["prefix"], strict=False)
+            except ValueError:
+                continue
+            if target.version != network.version or target not in network:
+                continue
+            if network.prefixlen > best_length:
+                best_length, matches = network.prefixlen, [dict(route)]
+            elif network.prefixlen == best_length:
+                matches.append(dict(route))
+        return matches
+
     def clear_all(self) -> int:
         count = len(self._routes)
         self._routes.clear()
@@ -135,16 +155,25 @@ class UnicastRIB:
         page_size: int = 50,
         sort: str = "received_at",
         ascending: bool = False,
+        community: str | None = None,
+        as_path_regex: re.Pattern[str] | None = None,
     ) -> dict:
         allowed_sort = {"id", "afi", "prefix", "next_hop", "peer", "received_at"}
         if sort not in allowed_sort:
             sort = "received_at"
 
         values = self._routes.values()
+        if community:
+            values = [route for route in values if community in route.get("communities", [])]
+        if as_path_regex:
+            values = [
+                route for route in values
+                if any(as_path_regex.search(str(asn)) for asn in route.get("as_path", []))
+            ]
         if sort == "received_at":
             ordered = values if ascending else reversed(values)
             routes = iter(ordered)
-            total = len(self._routes)
+            total = len(values)
         else:
             routes = sorted(
                 values,
