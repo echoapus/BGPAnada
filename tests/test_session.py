@@ -6,7 +6,7 @@ from unittest.mock import patch
 from bgpx.constants import MSG_UPDATE
 from bgpx.events import EventBus
 from bgpx.rib import UnicastRIB
-from bgpx.session import BGPSession, ESTABLISHED, OPEN_SENT, SessionConfig
+from bgpx.session import BGPSession, ESTABLISHED, OPEN_SENT, SessionConfig, _unicast_attributes
 
 
 PEER_IP = "192.0.2.1"
@@ -197,5 +197,25 @@ def test_update_dispatch_stores_unicast_route_metadata():
         announce = [e for e in events.history() if e["type"] == "announce"][0]
         assert announce["family"] == "unicast"
         assert announce["prefix"] == "203.0.113.0/24"
+
+    asyncio.run(run())
+
+
+def test_update_dispatch_extracts_shared_attributes_once():
+    async def run():
+        session, _ = _session()
+        session._set_state(ESTABLISHED)
+        update = {
+            "announce": {"ipv4-unicast": [
+                {"prefix": "203.0.113.0/24"}, {"prefix": "198.51.100.0/24"},
+            ]},
+            "withdraw": {},
+            "path_attributes": [],
+        }
+        with patch("bgpx.session.parse_update_details", return_value=update), patch(
+            "bgpx.session._unicast_attributes", wraps=_unicast_attributes
+        ) as attributes:
+            await session._dispatch(MSG_UPDATE, b"", FakeWriter())
+        attributes.assert_called_once_with(update["path_attributes"])
 
     asyncio.run(run())

@@ -26,6 +26,73 @@ const ATTR_AS4_AGGREGATOR: u8 = 18;
 const ATTR_IPV6_EXT_COMMUNITIES: u8 = 25;
 const ATTR_LARGE_COMMUNITIES: u8 = 32;
 
+struct AttributeRange {
+    flags: u8,
+    code: u8,
+    start: usize,
+    end: usize,
+}
+
+struct UpdateLayout {
+    withdrawn_end: usize,
+    attributes_end: usize,
+    attributes: Vec<AttributeRange>,
+}
+
+fn update_layout(body: &[u8], asn_len: usize) -> Result<UpdateLayout, &'static str> {
+    if asn_len != 2 && asn_len != 4 {
+        return Err("asn_len must be 2 or 4");
+    }
+    if body.len() < 2 {
+        return Err("UPDATE too short for withdrawn-routes length field");
+    }
+    let withdrawn_end = 2 + u16::from_be_bytes([body[0], body[1]]) as usize;
+    if withdrawn_end > body.len() {
+        return Err("UPDATE withdrawn_len exceeds message body");
+    }
+    if withdrawn_end + 2 > body.len() {
+        return Err("UPDATE too short for path-attributes length field");
+    }
+    let attributes_end = withdrawn_end + 2
+        + u16::from_be_bytes([body[withdrawn_end], body[withdrawn_end + 1]]) as usize;
+    if attributes_end > body.len() {
+        return Err("UPDATE attr_len exceeds message body");
+    }
+
+    let mut offset = withdrawn_end + 2;
+    let mut attributes = Vec::new();
+    while offset < attributes_end {
+        if offset + 2 > attributes_end {
+            return Err("Truncated path-attribute header");
+        }
+        let flags = body[offset];
+        let code = body[offset + 1];
+        offset += 2;
+        let length = if flags & 0x10 != 0 {
+            if offset + 2 > attributes_end {
+                return Err("Truncated extended path-attribute length");
+            }
+            let n = u16::from_be_bytes([body[offset], body[offset + 1]]) as usize;
+            offset += 2;
+            n
+        } else {
+            if offset >= attributes_end {
+                return Err("Truncated path-attribute length");
+            }
+            let n = body[offset] as usize;
+            offset += 1;
+            n
+        };
+        let end = offset + length;
+        if end > attributes_end {
+            return Err("Path attribute exceeds declared attribute length");
+        }
+        attributes.push(AttributeRange { flags, code, start: offset, end });
+        offset = end;
+    }
+    Ok(UpdateLayout { withdrawn_end, attributes_end, attributes })
+}
+
 #[pyfunction]
 fn parse_header(data: &[u8]) -> PyResult<(u8, u32)> {
     if data.len() < BGP_HEADER_LEN {
@@ -98,91 +165,24 @@ fn parse_open(py: Python, body: &[u8]) -> PyResult<PyObject> {
     Ok(d.into_py(py))
 }
 
-#[pyfunction]
+#[pyfunction(signature = (body, asn_len = 2))]
 fn parse_update_details(py: Python, body: &[u8], asn_len: usize) -> PyResult<PyObject> {
-    if asn_len != 2 && asn_len != 4 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "asn_len must be 2 or 4",
-        ));
-    }
-
-    let mut offset = 0;
-    if offset + 2 > body.len() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "UPDATE too short for withdrawn-routes length field",
-        ));
-    }
-    let withdrawn_len = u16::from_be_bytes([body[offset], body[offset + 1]]) as usize;
-    offset += 2;
-    if offset + withdrawn_len > body.len() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "UPDATE withdrawn_len exceeds message body",
-        ));
-    }
-    let withdrawn_payload = &body[offset..offset + withdrawn_len];
-    offset += withdrawn_len;
-
-    if offset + 2 > body.len() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "UPDATE too short for path-attributes length field",
-        ));
-    }
-    let attr_len = u16::from_be_bytes([body[offset], body[offset + 1]]) as usize;
-    offset += 2;
-    let attr_end = offset + attr_len;
-    if attr_end > body.len() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "UPDATE attr_len exceeds message body",
-        ));
-    }
+    let body = body.to_vec();
+    let layout = py.allow_threads(|| update_layout(&body, asn_len))
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let withdrawn_payload = &body[2..layout.withdrawn_end];
 
     let announce = PyDict::new_bound(py);
     let withdraw = PyDict::new_bound(py);
     let path_attributes = PyList::empty_bound(py);
     let mut trailing_next_hop: Option<String> = None;
 
-    while offset < attr_end {
-        if offset + 2 > attr_end {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "Truncated path-attribute header",
-            ));
-        }
-        let flags = body[offset];
-        let code = body[offset + 1];
-        offset += 2;
-
-        let alen = if flags & 0x10 != 0 {
-            if offset + 2 > attr_end {
-                return Err(pyo3::exceptions::PyValueError::new_err(
-                    "Truncated extended path-attribute length",
-                ));
-            }
-            let n = u16::from_be_bytes([body[offset], body[offset + 1]]) as usize;
-            offset += 2;
-            n
-        } else {
-            if offset >= attr_end {
-                return Err(pyo3::exceptions::PyValueError::new_err(
-                    "Truncated path-attribute length",
-                ));
-            }
-            let n = body[offset] as usize;
-            offset += 1;
-            n
-        };
-
-        if offset + alen > attr_end {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "Path attribute exceeds declared attribute length",
-            ));
-        }
-        let data = &body[offset..offset + alen];
-        offset += alen;
-
+    for attribute in layout.attributes {
+        let data = &body[attribute.start..attribute.end];
         let attr = path_attr_py(
             py,
-            flags,
-            code,
+            attribute.flags,
+            attribute.code,
             data,
             asn_len,
             &announce,
@@ -199,10 +199,10 @@ fn parse_update_details(py: Python, body: &[u8], asn_len: usize) -> PyResult<PyO
         withdraw.set_item("ipv4-unicast", routes)?;
     }
 
-    if attr_end < body.len() {
+    if layout.attributes_end < body.len() {
         let routes = unicast_routes_py(
             py,
-            &body[attr_end..],
+            &body[layout.attributes_end..],
             AFI_IPV4,
             trailing_next_hop.as_deref(),
         )

@@ -356,9 +356,9 @@ class BGPSession:
             announce = update["announce"]
             withdraw = update["withdraw"]
             path_attributes = update["path_attributes"]
+            as_path, communities = _unicast_attributes(path_attributes)
             for afi, routes in announce.items():
                 for route in routes:
-                    as_path, communities = _unicast_attributes(path_attributes)
                     route_id = self.rib.add_unicast(
                         afi=afi, prefix=route["prefix"], peer=self.config.peer_ip,
                         next_hop=route.get("next_hop", ""), as_path=as_path,
